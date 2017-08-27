@@ -1,0 +1,361 @@
+package rs.ac.bg.etf.pp1;
+
+import java_cup.runtime.*;
+import org.apache.log4j.*;
+import rs.ac.bg.etf.pp1.as.*;
+import rs.etf.pp1.symboltable.*;
+import rs.etf.pp1.symboltable.concepts.*;
+
+// import java.io.*;
+
+
+parser code {:
+		
+	Logger log = Logger.getLogger(getClass());
+   
+   
+    // slede redefinisani metodi za prijavu gresaka radi izmene teksta poruke
+     
+    public void report_fatal_error(String message, Object info) throws java.lang.Exception {
+      done_parsing();
+      report_error(message, info);
+    }
+  
+    public void syntax_error(Symbol cur_token) {
+        report_error("\nSintaksna greska", cur_token);
+    }
+  
+    public void unrecovered_syntax_error(Symbol cur_token) throws java.lang.Exception {
+        report_fatal_error("Fatalna greska, parsiranje se ne moze nastaviti", cur_token);
+    }
+
+    public void report_error(String message, Object info) {
+    	StringBuilder msg = new StringBuilder(message); 
+    	if (info instanceof Symbol)
+            msg.append (" na liniji ").append(((Symbol)info).left);
+        log.error(msg.toString());
+    }
+
+
+    public void report_info(String message, Object info) {
+    	StringBuilder msg = new StringBuilder(message); 
+    	if (info instanceof Symbol)
+            msg.append (" na liniji ").append(((Symbol)info).left);
+        log.info(msg.toString());
+    }
+:}
+
+scan with {:
+	Symbol s = this.getScanner().next_token();
+	if (s != null && s.value != null) 
+		log.info(s.toString() + " " + s.value.toString());
+	return s;
+:}
+
+init with {:
+	Tab.init(); // Universe scope
+:}
+
+action code {:
+	Obj currentMethod = null;
+	MojaKlasa mk = new MojaKlasa();
+
+
+	boolean inFunction = false;
+	boolean inMain = false;
+
+	boolean returnFound = false;
+:}
+
+
+//NOVI
+terminal PROG, BREAK, CLASS, ELSE, CONST, IF, NEW, PRINT, READ; 
+terminal RETURN, VOID, FOR, EXTENDS, CONTINUE, STATIC;
+terminal PLUS, MINUS, MUL, DIV, MOD, EQUALEQUAL, NOTEQUAL, LESS, LESSOREQUAL, AND, OR;
+terminal EQUAL, PLUSEQUAL, MINUSEQUAL, DIVEQUAL, MODEQUAL, PLUSPLUS, MINUSMINUS;
+terminal SEMI, COMMA, DOT, SQUAREBRACKETLEFT, SQUAREBRACKETRIGHT, LBRACE, RBRACE, LPAREN, RPAREN;
+terminal ANDAND, OROR, MOREOREQUAL, MORE, MULEQUAL;
+
+terminal Boolean BOOL;
+terminal Character CHAR;
+terminal Integer NUMBER ;
+terminal String IDENT ;
+//STARI
+//terminal LBRACE, RBRACE, SEMI, LPAREN, RPAREN, COMMA, PRINT, RETURN, PLUS, EQUAL, VOID;
+//terminal LBRACE, RBRACE, SEMI, LPAREN, RPAREN, COMMA, PLUS, EQUAL;
+//terminal Integer NUMBER ;
+//terminal String IDENT ;
+//terminal IF, ELSE;
+
+non terminal Program, MethodDeclList, Type, MethodDecl;
+non terminal VarDeclList, VarDecl,DeclList, ConstDecl, ClassDecl, ConstDeclList, ConstVal;
+non terminal FormalParamList, FormalParamDecl, FormPars, ActualPars, ActualParamList; 
+non terminal StatementList, Statement, Expr, Term;
+non terminal Obj Designator, Factor;
+non terminal Unmatched, Matched;
+non terminal VarDecElem, VarDecElemList;
+non terminal Assignop, Relop;
+non terminal Condition, CondTerm, CondFact;
+non terminal Addop, AddopLeft, AddopRight, Mulop, MulopRight, MulopLeft;
+ 
+
+
+Program ::= PROG IDENT:pName DeclList LBRACE MethodDeclList RBRACE
+{:
+	Tab.chainLocalSymbols(Tab.find(pName));
+	Tab.closeScope(); 
+	parser.report_info(mk.dump(),null);
+:} ;
+
+VarDeclList ::= VarDeclList VarDecl  
+				|
+				/* epsilon */ 
+				;
+DeclList ::= DeclList VarDecl  
+				|
+				DeclList ConstDecl
+				|
+				DeclList ClassDecl
+				|
+				/* epsilon */ 
+				;				
+VarDecl ::= Type VarDecElemList SEMI;
+VarDecElem ::= IDENT 
+{:
+	if(inFunction != true){
+		mk.globalVars++;
+	}
+	if(inMain == true){
+		mk.inMainVars++;
+	}
+:}
+			|
+			IDENT SQUAREBRACKETLEFT SQUAREBRACKETRIGHT
+{:
+	if(inFunction != true){
+		mk.globalVars++;
+	}
+	if(inMain == true){
+		mk.inMainVars++;
+	}
+:};
+			
+VarDecElemList ::=  VarDecElem COMMA VarDecElemList
+					| 
+					VarDecElem 
+					|
+					error:err COMMA VarDecElemList
+					{:
+						
+						parser.report_error("Sintaksna greska na liniji " + errleft + " pogresna deklaracija globalne promenljive | ZAREZ!" , null);
+						parser.report_info("Uspesan oporovak od greske na liniji" + errleft + "."  , null);
+					:}
+					|
+					error:err
+					{:
+						parser.report_error("Sintaksna greska na liniji " + errleft + " pogresna deklaracija globalne promenljive!" , null);
+						parser.report_info("Uspesan oporovak od greske na liniji" + errleft + "."  , null);
+					:}
+					
+					; 
+
+
+
+ConstVal ::= NUMBER
+{:
+	mk.globalConsts++;
+:}
+			 |
+			 BOOL
+{:
+	mk.globalConsts++;
+:}
+			 |
+			 CHAR
+{:
+	mk.globalConsts++;
+:}
+			 ;
+ConstDecl ::= CONST Type ConstDeclList SEMI ;
+
+ConstDeclList ::= IDENT EQUAL ConstVal COMMA ConstDeclList
+				  |
+				  IDENT EQUAL ConstVal
+				  ;
+
+Type ::= IDENT ;
+
+MethodDeclList ::= MethodDeclList MethodDecl
+					|
+					/* epsilon */
+					;
+
+MethodDecl ::= Type IDENT:funName LPAREN 
+{:
+	inFunction = true;
+	if(funName.equals("main")){
+		inMain = true;
+	}
+:}FormPars RPAREN 
+VarDeclList LBRACE 
+{:
+	inFunction = false;
+	inMain = false;
+:}StatementList RBRACE ;
+
+FormPars ::= FormalParamList | /* epsilon */ ;
+
+FormalParamList ::= FormalParamList COMMA FormalParamDecl
+					|
+					FormalParamDecl
+					;
+					
+FormalParamDecl ::= Type IDENT ;
+
+StatementList ::= StatementList Statement 
+					|
+				  /* epsilon */
+				  ;
+
+Statement ::= Matched 
+				| 
+			  Unmatched ;
+
+Unmatched ::= IF Expr Statement 
+			| 
+			IF Expr Matched ELSE Unmatched
+			;
+	
+				  
+Matched ::= Designator EQUAL Expr SEMI 
+			  |
+			  Designator EQUAL error SEMI
+			  {: parser.log.debug("Uspesan oporavak od greske pri dodeli vrednosti."); :}
+			  |
+			  Designator PLUSPLUS SEMI
+			  |
+			  Designator MINUSMINUS SEMI
+			  |
+			  Designator LPAREN ActualPars RPAREN SEMI
+			  |
+			  READ LPAREN Designator RPAREN SEMI
+			  |
+			  PRINT LPAREN Expr COMMA NUMBER RPAREN SEMI
+			  |
+			  PRINT LPAREN Expr RPAREN SEMI 
+			  {: mk.printCallCount++; :}
+			  |
+			  RETURN Expr SEMI
+			  |
+			  RETURN SEMI
+			  |
+			  IF Expr Matched ELSE Matched
+			  |
+			  LBRACE StatementList RBRACE
+			  ;
+
+Condition ::= CondTerm
+              |
+              CondTerm OROR CondTerm;
+
+CondTerm ::= CondFact
+             |
+             CondFact ANDAND CondFact;
+
+CondFact ::= Expr
+			 |
+			 Expr Relop Expr;
+			  
+Expr ::= Expr Addop Term
+		 |
+		 Term
+		 ;
+
+Term ::= Factor 
+		| 
+		Factor Mulop Term
+		;
+
+Factor ::=  Designator:des
+			{:
+				RESULT = des;	
+			:}
+		    |
+		   	Designator:des LPAREN ActualPars RPAREN
+		   	{:
+				RESULT = des;	
+			:} 	
+			|
+			NUMBER:num 
+			{:
+				RESULT = new Obj(Obj.Con, "", Tab.intType, num, Obj.NO_VALUE);	
+			:}
+			|
+			CHAR:c
+			{:
+				RESULT = new Obj(Obj.Con, "", Tab.charType, c, Obj.NO_VALUE);	
+			:}
+			|
+			BOOL:bo
+			{:
+				RESULT = new Obj(Obj.Con, "", MojaTabela.boolType, bo?1:0, Obj.NO_VALUE);	
+			:}
+			|
+			NEW Type:t
+			{:
+				if(t.getType().getKind() != Struct.Class && t.getKind() != Obj.Type){
+					parser.report_error("Greska na liniji " + tleft + " nije klasnog tipa", null);
+					RESULT = Tab.noObj; //NULL...
+				}
+				else
+				{
+					RESULT = t
+				}	
+			:}
+			|
+			NEW Type:tname SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
+			{:
+				if(tname.getKind() != Obj.Type){
+					parser.report_error("Greska na liniji " + tleft + " nije klasnog tipa", null);
+					RESULT = Tab.noObj; //NULL...
+				} else if(expr.getType() == Tab.intType){
+					parser.report_error("Greska na liniji " + tleft + " nije klasnog tipa", null);
+					RESULT = Tab.noObj; //NULL...					
+					}
+				else {
+				Struct struct = new Struct(Struct.Array, tName.getType());
+				RESULT = new Obj(tName.getKind(), "", struct);
+				}
+			:} 
+			|
+			LPAREN Expr RPAREN
+		   ;
+
+ActualPars ::= ActualParamList 
+				| 
+			   /* epsilon */ 
+			   ;
+			   
+ActualParamList ::= ActualParamList COMMA Expr
+					|
+					Expr
+					;
+
+Designator ::=  IDENT 
+				|
+				IDENT DOT IDENT 
+				|
+				IDENT SQUAREBRACKETLEFT Expr SQUAREBRACKETRIGHT;
+
+Assignop ::= EQUAL | AddopRight | MulopRight;
+Relop ::= EQUALEQUAL | NOTEQUAL | MORE | MOREOREQUAL | LESS | LESSOREQUAL;
+
+Addop ::= AddopLeft | AddopRight;
+AddopLeft ::= PLUS | MINUS;
+AddopRight ::= PLUSEQUAL | MINUSEQUAL;
+
+Mulop ::= MulopLeft | MulopRight;
+MulopLeft ::= MUL | DIV | MOD;
+MulopRight ::= MULEQUAL | DIVEQUAL | MODEQUAL;
+ 
+			  

@@ -1,0 +1,16 @@
+program MJProgram
+	int x[];
+	int y,u,t;
+	const int konstanta = 10;
+	
+	//int int; greska ime promenljive!
+	//int y*,d; //greska deklaracija globalne promenljive
+{
+	int main() 
+	int d;
+	{
+		print(1);
+		x = y+3;
+		print(2);
+	}
+}
