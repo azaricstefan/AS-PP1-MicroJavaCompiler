@@ -88,9 +88,9 @@ import java_cup.runtime.Symbol;
 <COMMENT> "\r\n" { yybegin(YYINITIAL); }
 
 
-"true"  { return new_symbol(sym.BOOL , yytext()); }
-"false"  { return new_symbol(sym.BOOL , yytext()); }
-"'"."'"  { return new_symbol(sym.CHAR , yytext()); }
+"true"  { return new_symbol(sym.BOOL , new Boolean(yytext())); }
+"false"  { return new_symbol(sym.BOOL , new Boolean(yytext())); }
+"'"."'"  { return new_symbol(sym.CHAR , new Character(yytext().charAt(1))); }
 [0-9]+  { return new_symbol(sym.NUMBER, new Integer (yytext())); }
 ([a-z]|[A-Z])[a-z|A-Z|0-9|_]* 	{return new_symbol (sym.IDENT, yytext()); }
 

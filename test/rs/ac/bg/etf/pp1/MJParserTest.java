@@ -27,10 +27,10 @@ public class MJParserTest {
 		
 		Reader br = null;
 		try {
-			File sourceCode = new File("test/program.mj");
-			log.info("Compiling source file: " + sourceCode.getAbsolutePath());
-			
-			br = new BufferedReader(new FileReader(sourceCode));
+            File sourceCode = new File("test/test301.mj");
+            log.info("Compiling source file: " + sourceCode.getAbsolutePath());
+
+            br = new BufferedReader(new FileReader(sourceCode));
 			Yylex lexer = new Yylex(br);
 			
 			MJParser p = new MJParser(lexer);
