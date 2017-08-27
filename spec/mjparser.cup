@@ -122,48 +122,49 @@ DeclList ::= DeclList VarDecl
 				|
 				/* epsilon */
 				;
-VarDecl ::= Type:cType {:
-                 constType = cType;
-             :}
+                VarDecl ::= Type:cType
+                {:
+                    constType = cType;
+                :}
              VarDecElemList SEMI;
 VarDecElem ::= IDENT:varName
-{:
-    parser.report_error("****************************************" + varName, null);
-    if(inFunction != true){
-		mk.globalVars++;
-	}
-	if(inMain == true){
-		mk.inMainVars++;
-	}
-	if(Tab.currentScope().findSymbol(varName) != null)
-    {
-        parser.report_error("Greska na liniji " + varNameleft + " vec postoji simbol sa imenom: " + varName, null);
-        RESULT = Tab.noObj; //NULL...
-    }
-    else
-    {
-        Tab.insert(Obj.Var, varName, constType);
-    }
-:}
-			|
-			IDENT:varName SQUAREBRACKETLEFT SQUAREBRACKETRIGHT
-{:
-	if(inFunction != true){
-		mk.globalVars++;
-	}
-	if(inMain == true){
-		mk.inMainVars++;
-	}
-	if(Tab.currentScope().findSymbol(varName) != null)
-    {
-           parser.report_error("Greska na liniji " + varNameleft + " vec postoji simbol sa imenom: " + varName, null);
-           RESULT = Tab.noObj; //NULL...
-       }
-       else
-       {
-           Tab.insert(Obj.Var, varName,new Struct(Struct.Array, constType));
-       }
-   :};
+                {:
+                    parser.report_error("****************************************" + varName, null);
+                    if(inFunction != true){
+                        mk.globalVars++;
+                    }
+                    if(inMain == true){
+                        mk.inMainVars++;
+                    }
+                    if(Tab.currentScope().findSymbol(varName) != null)
+                    {
+                        parser.report_error("Greska na liniji " + varNameleft + " vec postoji simbol sa imenom: " + varName, null);
+                        RESULT = Tab.noObj; //NULL...
+                    }
+                    else
+                    {
+                        Tab.insert(Obj.Var, varName, constType);
+                    }
+                :}
+                |
+                IDENT:varName SQUAREBRACKETLEFT SQUAREBRACKETRIGHT
+                {:
+                    if(inFunction != true){
+                        mk.globalVars++;
+                    }
+                    if(inMain == true){
+                        mk.inMainVars++;
+                    }
+                    if(Tab.currentScope().findSymbol(varName) != null)
+                    {
+                           parser.report_error("Greska na liniji " + varNameleft + " vec postoji simbol sa imenom: " + varName, null);
+                           RESULT = Tab.noObj; //NULL...
+                       }
+                       else
+                       {
+                           Tab.insert(Obj.Var, varName,new Struct(Struct.Array, constType));
+                       }
+                   :};
 
 VarDecElemList ::=  VarDecElem COMMA VarDecElemList
 					|
