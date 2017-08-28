@@ -8,6 +8,8 @@ import rs.etf.pp1.symboltable.concepts.*;
 
 
 parser code {:
+
+
 	Logger log = Logger.getLogger(getClass());
    
     // slede redefinisani metodi za prijavu gresaka radi izmene teksta poruke
@@ -63,6 +65,11 @@ action code {:
 	Struct constType = null;
 
 	boolean returnFound = false;
+
+    //da li je ime deklarisano u trenutnom opsegu
+    boolean checkName(String name){
+        return Tab.currentScope().findSymbol(name) == null;
+    }
 :}
 
 
@@ -99,16 +106,16 @@ non terminal Integer Addop, AddopLeft, AddopRight, Mulop, MulopRight, MulopLeft 
 
 
 Program ::= PROG IDENT:pName
-{:
-    MojaTabela.insert(Obj.Prog,pName,Tab.noType);
-    Tab.openScope();
-:}
-DeclList LBRACE MethodDeclList RBRACE
-{:
-	Tab.chainLocalSymbols(Tab.find(pName));
-	Tab.closeScope();
-	Tab.dump(new MojTableVisitor());
-:} ;
+            {:
+                MojaTabela.insert(Obj.Prog,pName,Tab.noType);
+                Tab.openScope();
+            :}
+            DeclList LBRACE MethodDeclList RBRACE
+            {:
+                Tab.chainLocalSymbols(Tab.find(pName));
+                Tab.closeScope();
+                Tab.dump(new MojTableVisitor());
+            :} ;
 
 VarDeclList ::= VarDeclList VarDecl
 				|
@@ -126,10 +133,10 @@ DeclList ::= DeclList VarDecl
                 {:
                     constType = cType;
                 :}
-             VarDecElemList SEMI;
+                VarDecElemList SEMI;
 VarDecElem ::= IDENT:varName
                 {:
-                    parser.report_error("****************************************" + varName, null);
+                    //parser.report_error("****************************************" + varName, null);
                     if(inFunction != true){
                         mk.globalVars++;
                     }
@@ -397,8 +404,9 @@ Factor ::=  Designator:des
 			|
 			NEW Type:tname SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
 			{:
-				if(expr.getType() == Tab.intType){
-					parser.report_error("Greska na liniji " + tnameleft + " nije klasnog tipa", null);
+			    //parser.log.debug("NEW Tip: " + tname.getKind());
+				if(expr.getType() != Tab.intType){
+					parser.report_error("Greska na liniji " + tnameleft + " nije int tip[example: new int[5]]", null);
 					RESULT = Tab.noObj; //NULL...
 				  }
 				else {
@@ -437,13 +445,19 @@ Designator ::=  IDENT:ident
 				|
 				Designator DOT IDENT:ident
 				{:
-				    //nije ok
+				    //nije ok, ako budem radio KLASE treba...
                     RESULT=Tab.find(ident);
                 :}
 				|
 				Designator:des SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
 				{:
-				    //nije ok
+				    //nadji element tipa i vrati taj TYPE!
+				    Struct elemType = des.getType().getElemType();
+				    if(elemType.getKind() == Struct.Int){
+				        Obj obj = new Obj(Obj.Var, "", Tab.intType);
+				        RESULT = obj;
+				    } else
+				    //parser.report_error("Designator NIZ: tip elementa:" + elemType.getKind(),null);
 				    RESULT = des;
 				:};
 
@@ -452,19 +466,22 @@ Relop ::= EQUALEQUAL | NOTEQUAL | MORE | MOREOREQUAL | LESS | LESSOREQUAL;
 
 Expr ::= ComboExpr:expr
         {:
-
+            //nije int && nije char && nije bool
             if(expr.getType() != Tab.intType && expr.getType() != Tab.charType && expr.getType() != MojaTabela.boolType){
-                parser.report_error("Greska na liniji " + exprleft + " nije int tipa", null);
+                parser.log.debug("Tip: " + expr.getType().getKind());
+                //TODO: provera getElemType
+                parser.report_error("Greska na liniji " + exprleft + " nije int tipa | ID[1] => " + expr.getType().getKind(), null);
                 RESULT = Tab.noObj; //NULL...
             } else{
                 RESULT = expr;
             }
+                //RESULT = expr;
         :}
          |
          MINUS ComboExpr:expr
          {:
             if(expr.getType() != Tab.intType){
-                parser.report_error("Greska na liniji " + exprleft + " nije int tipa", null);
+                parser.report_error("Greska na liniji " + exprleft + " nije int tipa | ID[2]", null);
                 RESULT = Tab.noObj; //NULL...
             } else{
                 RESULT = expr;
@@ -473,12 +490,12 @@ Expr ::= ComboExpr:expr
 
 ComboExpr ::=   AddTerm:addTerm CombOp ComboExpr:comboExpr
                 {:
-                    if(addTerm.getKind() != Obj.Var){
-                        parser.report_error("Greska na liniji " + addTermleft+ " nije varijabla", null);
+                    if(addTerm.getKind() != Obj.Var && addTerm.getKind() != Obj.Elem){
+                        parser.report_error("Greska na liniji " + addTermleft+ " nije varijabla(neocekivana kategorija simbola)", null);
                         RESULT = Tab.noObj; //NULL...
                     }
                     else if(addTerm.getType() != Tab.intType || comboExpr.getType() != Tab.intType){
-                        parser.report_error("Greska na liniji " + addTermleft + " nije int tipa", null);
+                        parser.report_error("Greska na liniji " + addTermleft + " nije int tipa | ID[3]" + "addterm tip:" + addTerm.getType().getKind() + "comboExpr tip: " + comboExpr.getType().getKind(), null); //bodovi = (niz[1]/=niz[0]);
                         RESULT = Tab.noObj; //NULL...
                     } else{
                      RESULT = addTerm;
@@ -493,7 +510,7 @@ ComboExpr ::=   AddTerm:addTerm CombOp ComboExpr:comboExpr
 AddTerm ::= AddTerm:addTerm AddopLeft Term:term
             {:
                 if(addTerm.getType() != Tab.intType ||  term.getType() != Tab.intType){
-                    parser.report_error("Greska na liniji " + addTermleft + " nije int tipa!", null);
+                    parser.report_error("Greska na liniji " + addTermleft + " nije int tipa | ID[4]", null);
                     RESULT = Tab.noObj; //NULL...
                 } else{
                     RESULT = term;
@@ -521,7 +538,7 @@ Term ::= Term:term MulopLeft Factor:factor
 		:}
 		;
 
-CombOp ::= AddopRight
+CombOp ::= AddopRight:addri
             {:
                 RESULT = addri;
             :}
