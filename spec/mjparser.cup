@@ -90,11 +90,14 @@ non terminal Program, MethodDeclList, MethodDecl;
 non terminal VarDeclList, VarDecl,DeclList, ConstDecl, ClassDecl, ConstDeclList, ConstVal;
 non terminal FormalParamList, FormalParamDecl, FormPars, ActualPars, ActualParamList;
 non terminal StatementList, Statement;
-non terminal Struct Type;
 /*
 NON TERMINAL OBJECTS
 */
-non terminal Obj Designator, Factor, Expr, Term, MethodType, ComboExpr, AddTerm;
+non terminal Obj Designator, Factor, Expr, Term, ComboExpr, AddTerm;
+/*
+NON TERMINAL Structs
+*/
+non terminal Struct Type, MethodType;
 
 
 non terminal Unmatched, Matched;
@@ -129,10 +132,10 @@ DeclList ::= DeclList VarDecl
 				|
 				/* epsilon */
 				;
-                VarDecl ::= Type:cType
-                {:
-                    constType = cType;
-                :}
+VarDecl ::=     Type:cType
+                    {:
+                        constType = cType;
+                    :}
                 VarDecElemList SEMI;
 VarDecElem ::= IDENT:varName
                 {:
@@ -150,6 +153,7 @@ VarDecElem ::= IDENT:varName
                     }
                     else
                     {
+                        parser.report_info("Deklarisana promenljiva '" + varName + "' na liniji " + varNameleft, null);
                         Tab.insert(Obj.Var, varName, constType);
                     }
                 :}
@@ -169,6 +173,7 @@ VarDecElem ::= IDENT:varName
                        }
                        else
                        {
+                           parser.report_info("Deklarisana promenljiva tipa niz '" + varName + "' na liniji " + varNameleft, null);
                            Tab.insert(Obj.Var, varName,new Struct(Struct.Array, constType));
                        }
                    :};
@@ -267,9 +272,11 @@ Type ::= IDENT:ident
 		        RESULT = obj.getType();
 		:} ;
 
-MethodType ::= Type
+MethodType ::= Type:type
+                {: RESULT = type; :}
 			   |
-			   VOID;
+			   VOID
+			   {: RESULT = Tab.noType; :};
 
 MethodDeclList ::= MethodDeclList MethodDecl
 					|
@@ -278,7 +285,7 @@ MethodDeclList ::= MethodDeclList MethodDecl
 
 MethodDecl ::=  MethodType:type IDENT:funName
                 {:
-                    MojaTabela.insert(Obj.Meth,funName,Tab.noType);
+                    MojaTabela.insert(Obj.Meth,funName,type);
                     Tab.openScope();
                 :}
                 LPAREN
@@ -470,7 +477,9 @@ Expr ::= ComboExpr:expr
             if(expr.getType() != Tab.intType && expr.getType() != Tab.charType && expr.getType() != MojaTabela.boolType){
                 parser.log.debug("Tip: " + expr.getType().getKind());
                 //TODO: provera getElemType
-                parser.report_error("Greska na liniji " + exprleft + " nije int tipa | ID[1] => " + expr.getType().getKind(), null);
+                if(expr.getType().getKind() != Struct.Array){
+                    parser.report_error("Greska na liniji " + exprleft + " nije int tipa | ID[1] => " + expr.getType().getKind(), null);
+                }
                 RESULT = Tab.noObj; //NULL...
             } else{
                 RESULT = expr;
