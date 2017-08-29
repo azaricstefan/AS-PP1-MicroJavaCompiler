@@ -287,6 +287,7 @@ MethodDecl ::=  MethodType:type IDENT:funName
                 {:
                     MojaTabela.insert(Obj.Meth,funName,type);
                     Tab.openScope();
+                    parser.report_info("Obradjuje se funkcija: " + funName + " na liniji " + funNameleft, null);
                 :}
                 LPAREN
                 {:
@@ -377,9 +378,15 @@ Factor ::=  Designator:des
 				RESULT = des;
 			:}
 		    |
-		   	Designator:des LPAREN ActualPars RPAREN
+		   	Designator:func LPAREN ActualPars RPAREN
 		   	{:
-				RESULT = des;
+				RESULT = func;
+				if (Obj.Meth == func.getKind())
+				    parser.report_info("Pronadjen poziv funkcije " + func.getName() + " na liniji " + funcleft, null);
+                else{
+                    parser.report_error("Greska na liniji " + funcleft + " : ime " + func.getName() + " nije funkcija!", null);
+                }
+                //TODO: DA LI SE STVARNI PARAMETRI SLAZU SA FORMALNIM [dodati proveru]
 			:}
 			|
 			NUMBER:num
@@ -441,6 +448,10 @@ ActualParamList ::= ActualParamList COMMA Expr
 Designator ::=  IDENT:ident
                 {:
                  Obj obj=Tab.find(ident);
+
+                if(obj == Tab.noObj) {
+                    parser.report_error("Greska na liniji " + identleft + " : ime " + ident + " nije deklarisano!", null);
+                }
 
                 if(obj.getKind()!=Obj.Var && obj.getKind()!=Obj.Con && obj.getKind()!=Obj.Meth ){
                     parser.report_error("Greska na liniji "+ " nije var, con, meth!!!!!!!!!!!"+obj.getKind(), null);
