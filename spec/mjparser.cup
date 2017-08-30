@@ -11,7 +11,8 @@ parser code {:
 
 
 	Logger log = Logger.getLogger(getClass());
-   
+
+    boolean errorDetected = false;
     // slede redefinisani metodi za prijavu gresaka radi izmene teksta poruke
      
     public void report_fatal_error(String message, Object info) throws java.lang.Exception {
@@ -28,6 +29,7 @@ parser code {:
     }
 
     public void report_error(String message, Object info) {
+        errorDetected = true;
     	StringBuilder msg = new StringBuilder(message); 
     	if (info instanceof Symbol)
             msg.append (" na liniji ").append(((Symbol)info).left);
@@ -58,7 +60,6 @@ init with {:
 action code {:
 	Obj currentMethod = null;
 	MojaKlasa mk = new MojaKlasa();
-
 
 	boolean inFunction = false;
 	boolean inMain = false;
@@ -118,6 +119,10 @@ Program ::= PROG IDENT:pName
                 Tab.chainLocalSymbols(Tab.find(pName));
                 Tab.closeScope();
                 Tab.dump(new MojTableVisitor());
+                if(!parser.errorDetected)
+                    parser.log.info("Parsiranje uspesno zavrseno!");
+                else
+                    parser.log.error("Parsiranje NIJE uspesno zavrseno!");
             :} ;
 
 VarDeclList ::= VarDeclList VarDecl
@@ -285,9 +290,10 @@ MethodDeclList ::= MethodDeclList MethodDecl
 
 MethodDecl ::=  MethodType:type IDENT:funName
                 {:
-                    MojaTabela.insert(Obj.Meth,funName,type);
+                    currentMethod = MojaTabela.insert(Obj.Meth,funName,type);
                     Tab.openScope();
                     parser.report_info("Obradjuje se funkcija: " + funName + " na liniji " + funNameleft, null);
+                    //todo: neka promenljiva brPar=0;
                 :}
                 LPAREN
                 {:
@@ -297,13 +303,23 @@ MethodDecl ::=  MethodType:type IDENT:funName
                     }
                 :}
                 FormPars RPAREN
+                {:
+                    //TODO currentscope.setLevel(numPar);
+                :}
                 VarDeclList LBRACE
                 {:
+                    //TODO ovde ide gen koda za ulaz u metodu
                     inFunction = false;
-                    inMain = false;
+                    //inMain = false;
                 :}
                 StatementList RBRACE
                 {:
+                    if(!returnFound && type != Tab.noType && inMain == false) //ovo je i za void
+                        parser.report_error("Semanticka greska na liniji " + typeleft + ": funkcija " + funName + " nema RETURN iskaz", null); //CHECK return iskaz
+                    inMain = false;
+                    currentMethod = null;
+                    returnFound = false;
+
                     Tab.chainLocalSymbols(Tab.find(funName));
                     Tab.closeScope();
                 :};
@@ -315,7 +331,10 @@ FormalParamList ::= FormalParamList COMMA FormalParamDecl
 					FormalParamDecl
 					;
 
-FormalParamDecl ::= Type IDENT ;
+FormalParamDecl ::= Type IDENT
+ {:
+ //TODO numPar++;,   dodajes u scope metode ovaj iden
+ :};
 
 StatementList ::= StatementList Statement
 					|
@@ -332,32 +351,78 @@ Unmatched ::= IF Expr Statement
 			;
 
 
-Matched ::= Designator Assignop Expr SEMI
-			  |
-			  Designator EQUAL error SEMI
-			  {: parser.log.debug("Izraz tipa: nesto = XX; XX je lose. Uspesan oporavak od greske pri dodeli vrednosti."); :}
-			  |
-			  Designator PLUSPLUS SEMI
-			  |
-			  Designator MINUSMINUS SEMI
-			  |
-			  Designator LPAREN ActualPars RPAREN SEMI
-			  |
-			  READ LPAREN Designator RPAREN SEMI
-			  |
-			  PRINT LPAREN Expr COMMA NUMBER RPAREN SEMI
-			  |
-			  PRINT LPAREN Expr RPAREN SEMI
-			  {: mk.printCallCount++; :}
-			  |
-			  RETURN Expr SEMI
-			  |
-			  RETURN SEMI
-			  |
-			  IF Expr Matched ELSE Matched
-			  |
-			  LBRACE StatementList RBRACE
-			  ;
+Matched ::= Designator:destination Assignop Expr:expression SEMI
+            {:
+                //TODO , provera za dodelu vr
+                if(!expression.getType().assignableTo(destination.getType())){
+                    parser.report_error("Greska na liniji: " + destinationleft + " : nekompatibilni tipovi u dodeli vrednosti", null); //CHECK THIS
+                }
+
+            :}
+            |
+            Designator EQUAL error SEMI
+            {: parser.log.debug("Izraz tipa: nesto = XX; XX je lose. Uspesan oporavak od greske pri dodeli vrednosti."); :}
+            |
+            Designator PLUSPLUS SEMI
+            {:
+                //TODO   des mora da je int
+            :}
+            |
+            Designator MINUSMINUS SEMI
+            {:
+                //TODO   des mora da je int
+            :}
+            |
+            Designator:func LPAREN ActualPars RPAREN SEMI
+            {:
+                if (Obj.Meth == func.getKind())
+                {
+                    parser.report_info("[Matched]Pronadjen poziv funkcije " + func.getName() + " na liniji " + funcleft, null);
+                    RESULT = func.getType();
+                }
+                else{
+                    parser.report_error("[Matched]Greska na liniji " + funcleft + " : ime " + func.getName() + " nije funkcija!", null);
+                    RESULT = Tab.noType;
+                }
+            :}
+            |
+            READ LPAREN Designator RPAREN SEMI
+            {:
+               //TODO de je variabla tipa int, bool ili char
+            :}
+            |
+            PRINT LPAREN Expr COMMA NUMBER RPAREN SEMI
+            {:
+               //TODO: de je tipa int, bool ili char
+               //Todo: num je tipa int
+            :}
+            |
+            PRINT LPAREN Expr RPAREN SEMI
+            {:
+               mk.printCallCount++; //TODO: tipa int,...
+            :}
+            |
+            RETURN Expr:typeOfExpr SEMI
+            {:
+                returnFound = true;
+                Obj currentMethodType = currentMethod;
+                if(!currentMethodType.getType().compatibleWith(typeOfExpr.getType()))
+                {
+                    parser.report_error("Greska na liniji: " + typeOfExprleft + " : tip izraza u return naredbi ne slaze se sa tipom povratne vrednosti funkcije: " + currentMethod.getName(), null);
+                }
+                //TODO expr je kompatibilno sa tipom metode
+                //CHECK THIS
+            :}
+            |
+            RETURN SEMI
+            {:
+               //TODO metoda je void
+            :}
+            |
+            IF Expr Matched ELSE Matched
+            |
+            LBRACE StatementList RBRACE
+            ;
 
 Condition ::= CondTerm
               |
@@ -380,13 +445,17 @@ Factor ::=  Designator:des
 		    |
 		   	Designator:func LPAREN ActualPars RPAREN
 		   	{:
-				RESULT = func;
+
 				if (Obj.Meth == func.getKind())
+				{
 				    parser.report_info("Pronadjen poziv funkcije " + func.getName() + " na liniji " + funcleft, null);
+				    RESULT = func;
+                }
                 else{
                     parser.report_error("Greska na liniji " + funcleft + " : ime " + func.getName() + " nije funkcija!", null);
+                    RESULT = Tab.noObj;
                 }
-                //TODO: DA LI SE STVARNI PARAMETRI SLAZU SA FORMALNIM [dodati proveru]
+                //TODO: DA LI SE STVARNI PARAMETRI SLAZU SA FORMALNIM [dodati proveru] preko steka ovo ide
 			:}
 			|
 			NUMBER:num
@@ -440,7 +509,7 @@ ActualPars ::= ActualParamList
 			   /* epsilon */
 			   ;
 
-ActualParamList ::= ActualParamList COMMA Expr
+ActualParamList ::= ActualParamList COMMA Expr //TODO ovde je jebada, moras da imas svoj stek u kome sacuvaj ove tipove
 					|
 					Expr
 					;
@@ -469,14 +538,14 @@ Designator ::=  IDENT:ident
 				|
 				Designator:des SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
 				{:
-				    //nadji element tipa i vrati taj TYPE!
+				    //nadji element tipa i vrati taj TYPE!//TODO:  des treba da bude tipa array a expr tipa int
 				    Struct elemType = des.getType().getElemType();
 				    if(elemType.getKind() == Struct.Int){
 				        Obj obj = new Obj(Obj.Var, "", Tab.intType);
 				        RESULT = obj;
 				    } else
 				    //parser.report_error("Designator NIZ: tip elementa:" + elemType.getKind(),null);
-				    RESULT = des;
+				    RESULT = des;   // TODO: vraca tip elem niza elemType a tipa elemType za niz tipa int vraca int
 				:};
 
 Assignop ::= EQUAL | AddopRight | MulopRight;
@@ -488,7 +557,7 @@ Expr ::= ComboExpr:expr
             if(expr.getType() != Tab.intType && expr.getType() != Tab.charType && expr.getType() != MojaTabela.boolType){
                 parser.log.debug("Tip: " + expr.getType().getKind());
                 //TODO: provera getElemType
-                if(expr.getType().getKind() != Struct.Array){
+                if(expr.getType().getKind() != Struct.Array){// TODO mislim da je ovo treba gore
                     parser.report_error("Greska na liniji " + exprleft + " nije int tipa | ID[1] => " + expr.getType().getKind(), null);
                 }
                 RESULT = Tab.noObj; //NULL...
@@ -518,7 +587,13 @@ ComboExpr ::=   AddTerm:addTerm CombOp ComboExpr:comboExpr
                         parser.report_error("Greska na liniji " + addTermleft + " nije int tipa | ID[3]" + "addterm tip:" + addTerm.getType().getKind() + "comboExpr tip: " + comboExpr.getType().getKind(), null); //bodovi = (niz[1]/=niz[0]);
                         RESULT = Tab.noObj; //NULL...
                     } else{
-                     RESULT = addTerm;
+                        if(addTerm.getType().equals(comboExpr.getType()) && comboExpr.getType() == Tab.intType)
+                            RESULT = addTerm;
+                        else
+                        {
+                            parser.report_error("Greska na liniji " + comboExprleft + " : nekompatibilni tipovi u izrazu za sabiranje. + [" + addTerm.getType().getKind() + "][" + comboExpr.getType().getKind() + "]", null);
+                            RESULT = Tab.noObj; //Tab.noType u videu...
+                        }
                     }
                 :}
 				|
@@ -569,9 +644,12 @@ CombOp ::= AddopRight:addri
 		   :};
 
 
-Addop ::= AddopLeft | AddopRight;
+Addop ::=   AddopLeft | AddopRight
+            {:
+                 //TODO: fale svuda RESULT i vracaj COode.add .... Code.eq
+            :};
 AddopLeft ::= PLUS | MINUS;
-AddopRight ::= PLUSEQUAL | MINUSEQUAL;
+AddopRight ::= PLUSEQUAL | MINUSEQUAL;//
 
 Mulop ::= MulopLeft | MulopRight;
 MulopLeft ::= MUL | DIV | MOD;
