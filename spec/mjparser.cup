@@ -398,6 +398,7 @@ MethodDecl ::=  MethodType:type IDENT:funName
                     if("main".equals(funName)){
                         Code.mainPc = currentMethod.getAdr();
                     }
+
                     Code.put(Code.enter);
                     Code.put(currentMethod.getLevel()); //broj argumenata enter funkcije //drugi operand koliko ukupno arg i lok prom a prvi da
                     Code.put(Tab.currentScope().getnVars()-currentMethod.getLevel()); //daje broj promenljivih
@@ -424,6 +425,19 @@ MethodDecl ::=  MethodType:type IDENT:funName
 
                     Tab.chainLocalSymbols(Tab.find(funName));
                     Tab.closeScope();
+                    if(type!= Tab.noType){
+                        if(!parser.errorDetected){
+                            Code.put(Code.exit);
+                            Code.put(Code.return_);
+                        }
+                    }
+                    else {
+                        if(!parser.errorDetected){
+                            Code.put(Code.trap);
+                            Code.put(1);
+                        }
+                    }
+
                     inFunction = false;
                     inMain = false; //ovo treba posle closeScope!
                     currentMethod = null;
@@ -451,7 +465,24 @@ FormalParamDecl ::= Type:type IDENT:ident
         currentMethod.setLevel(currentMethod.getLevel()+1);
     }
                                         //TODO numPar++;,   dodajes u scope metode ovaj iden
- :};
+ :}
+ |
+ Type:type IDENT:ident SQUAREBRACKETLEFT SQUAREBRACKETRIGHT
+  {:
+     if(Tab.currentScope().findSymbol(ident) == Tab.noObj)
+     {
+         parser.report_error("Greska na liniji " + typeleft + " vec postoji simbol sa imenom: " + ident, null);
+         RESULT = Tab.noObj;
+     }
+     else
+     {
+         numOfParameters++;
+         Tab.insert(Obj.Var, ident, new Struct(Struct.Array, type));
+         currentMethod.setLevel(currentMethod.getLevel()+1);
+     }
+                                         //TODO numPar++;,   dodajes u scope metode ovaj iden
+  :}
+  ;
 
 StatementList ::= StatementList Statement
 					|
@@ -468,7 +499,7 @@ Unmatched ::= IF Expr Statement
 			;
 
 
-Matched ::= Designator:destination Assignop Expr:expression SEMI
+Matched ::= Designator:destination EQUAL Expr:expression SEMI
             {:
                 //provera za dodelu vr
                 if(!expression.getType().assignableTo(destination.getType())){
@@ -481,11 +512,36 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
 
             :}
             |
+            Designator:dest
+            {:
+                if(dest.getKind()!=Obj.Var && dest.getKind()!=Obj.Elem)
+                    parser.report_error("Greska na liniji " + destleft + ": "+dest.getName()+" nije promenljiva!", null); //bodovi = (niz[1]/=niz[0]);
+                else if(dest.getKind()==Obj.Var)
+                    Code.load(dest);
+                else if( dest.getKind() == Obj.Elem)
+                {
+                    Code.put(Code.dup2);
+                    Code.load(dest);
+                }
+             :}
+            CombOp:op Expr:expr SEMI
+            {:
+                if(dest.getType() != Tab.intType || expr.getType() != Tab.intType){
+                      parser.report_error("Greska na liniji " + destleft + ": nije int tipa! " , null); //bodovi = (niz[1]/=niz[0]);
+                }
+                else
+                {
+                    Code.put(op);
+                    Code.store(dest);
+                }
+
+            :}
+            |
             Designator:des EQUAL error SEMI
             {: parser.log.debug("Izraz tipa: nesto = XX; XX je lose. Uspesan oporavak od greske pri dodeli vrednosti. Linija: " + desleft); :}
             |
             Designator:des PLUSPLUS SEMI
-            {:
+            {://todo da li je const
                 if(des.getType().getKind() == Struct.Int){
                     RESULT = des;
 
@@ -505,7 +561,7 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
                 }
             :}
             |
-            Designator:des MINUSMINUS SEMI
+            Designator:des MINUSMINUS SEMI//todo da li je const
             {:
                 if(des.getType().getKind() == Struct.Int){
                     RESULT = des;
@@ -642,14 +698,23 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
                 if(!currentMethodType.getType().compatibleWith(typeOfExpr.getType()))
                 {
                     parser.report_error("Greska na liniji: " + typeOfExprleft + " : tip izraza u return naredbi ne slaze se sa tipom povratne vrednosti funkcije: " + currentMethod.getName(), null);
+                } //CHECK THIS
+                if(!parser.errorDetected){
+                    Code.put(Code.exit);
+                    Code.put(Code.return_);
                 }
-                //TODO expr je kompatibilno sa tipom metode
-                //CHECK THIS
             :}
             |
-            RETURN SEMI
+            RETURN:r SEMI
             {:
-               //TODO metoda je void
+                if(currentMethod.getType() != Tab.noType){
+                    parser.report_semantic_error(rleft, "Metoda "+currentMethod.getName()+" je deklarisana da vraca vrednost");
+                }
+
+                if(!parser.errorDetected){
+                    Code.put(Code.exit);
+                    Code.put(Code.return_);
+                }
             :}
             |
             IF Expr Matched ELSE Matched
@@ -767,11 +832,20 @@ Factor ::=  Designator:des
 			    //parser.log.debug("NEW Tip: " + tname.getKind());
 				if(expr.getType() != Tab.intType){
 					parser.report_error("Greska na liniji " + tnameleft + " nije int tip[example: new int[5]]", null);
-					RESULT = Tab.noObj; //NULL...
+					RESULT = Tab.noObj;
 				  }
 				else {
 					Struct struct = new Struct(Struct.Array, tname);
-					RESULT = new Obj(Obj.Var, "", struct);
+					RESULT = new Obj(Obj.Con, "", struct);
+
+					if(!parser.errorDetected){
+                        Code.put(Code.newarray);
+                        if(tname == Tab.charType){
+                            Code.put(0);
+                        }else{
+                            Code.put(1);
+                        }
+                    }
 				}
 			:}
 			|
@@ -825,22 +899,24 @@ Designator ::=  IDENT:ident
                         if(des.getType().getKind() != Struct.Array){
                             parser.report_semantic_error(desleft,"Simbol "+ des.getName()+  " ne predstavlja niz.");
                         }
+                        else
+                            Code.load(des);
                     }
 				:}
 				SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
 				{:
 				    RESULT = Tab.noObj; //CHECK [1]
                     if(des != Tab.noObj){
-                        boolean arrOk = true;
+                        boolean arrayOk = true;
                         if(des.getType().getKind() != Struct.Array){
-                            arrOk = false;
+                            arrayOk = false;
                         }
                         if(expr.getType() != Tab.intType){
                             parser.report_error("Tipovi se ne poklapaju! 1: " + des + " 2: " + expr, null);
-                            arrOk = false;
+                            arrayOk = false;
                         }
 
-                        if(arrOk){
+                        if(arrayOk){
                             parser.log.debug("Designator tip(3 je array): " + des.getType().getKind() + " Expression tip(1 je int): " + expr.getType().getKind());
                             RESULT = new Obj(Obj.Elem, des.getName()+"[]", des.getType().getElemType(), des.getAdr(), des.getLevel());
                         }
@@ -861,7 +937,7 @@ Expr ::= ComboExpr:expr
             } else
             if(expr.getKind()==Obj.Var || expr.getKind()==Obj.Elem)
                                 Code.load(expr);
-                RESULT = new Obj(Obj.Con, "", Tab.intType);
+            RESULT = new Obj(Obj.Con, "", expr.getType());
         :}
          |
          MINUS ComboExpr:expr
