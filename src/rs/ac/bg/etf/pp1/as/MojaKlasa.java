@@ -10,8 +10,9 @@ public class MojaKlasa {
 	
 	public String dump(){
 		StringBuilder sb = new StringBuilder();
-		sb.append("Print call: " + printCallCount + "\n");
-		sb.append("Deklaracije globalnih promenljivih: " + globalVars + "\n");
+        sb.append("=====================SINTAKSNA ANALIZA=========================" + "\n");
+        sb.append("Broj Print poziva: " + printCallCount + "\n");
+        sb.append("Deklaracije globalnih promenljivih: " + globalVars + "\n");
 		sb.append("Deklaracije lokalnih promenljivih(main): " + inMainVars + "\n");
 		sb.append("Deklaracije globalnih konstanti: " + globalConsts + "\n");
 		return sb.toString();
