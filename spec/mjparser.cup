@@ -158,6 +158,8 @@ Program ::= PROG IDENT:pName
             :}
             DeclList LBRACE MethodDeclList RBRACE
             {:
+                Code.dataSize = Tab.currentScope().getnVars();
+
                 Tab.chainLocalSymbols(Tab.find(pName));
                 Tab.closeScope();
                 String tmp = mk.dump();
@@ -373,15 +375,18 @@ MethodDecl ::=  MethodType:type IDENT:funName
                 :}
                 StatementList RBRACE
                 {:
-                    if(!returnFound && type != Tab.noType) //&& inMain == false)//da bi i za main proveravao RETURN   //ovo je i za void
+                    if(!returnFound && type != Tab.noType && inMain == false)  //ovo je i za void
                         parser.report_error("Semanticka greska na liniji " + typeleft + ": funkcija " + funName + " nema RETURN iskaz", null); //CHECK return iskaz
+                    if(type != Tab.noType && inMain == true){
+                        parser.report_error("Semanticka greska na liniji " + typeleft + ": funkcija " + funName + " mora biti VOID!", null); //CHECK return iskaz
+                    }
 
                     Code.put(Code.exit); //zavrsne instrukcije metode
                     Code.put(Code.return_);
 
                     Tab.chainLocalSymbols(Tab.find(funName));
                     Tab.closeScope();
-                     inFunction = false;
+                    inFunction = false;
                     inMain = false; //ovo treba posle closeScope!
                     currentMethod = null;
                     returnFound = false;
@@ -427,9 +432,13 @@ Unmatched ::= IF Expr Statement
 
 Matched ::= Designator:destination Assignop Expr:expression SEMI
             {:
-                //TODO , provera za dodelu vr
+                //provera za dodelu vr
                 if(!expression.getType().assignableTo(destination.getType())){
                     parser.report_error("Greska na liniji: " + destinationleft + " : nekompatibilni tipovi u dodeli vrednosti", null); //CHECK THIS
+                }
+                else {
+                    //generisati kod
+                    Code.store(destination); //X=5 (5 je destination)
                 }
 
             :}
@@ -465,6 +474,10 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
                 {
                     parser.report_info("[Matched]Pronadjen poziv funkcije " + func.getName() + " na liniji " + funcleft, null);
                     RESULT = func.getType();
+
+                    int destAdr = func.getAdr() - Code.pc; //PC relativna adresa
+                    Code.put(Code.call);
+                    Code.put2(destAdr); //PC relativan skok
                 }
                 else{
                     parser.report_error("[Matched]Greska na liniji " + funcleft + " : ime " + func.getName() + " nije funkcija!", null);
@@ -555,6 +568,7 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
 
 Factor ::=  Designator:des
 			{:
+			    Code.load(des);
 				RESULT = des;
 			:}
 		    |
