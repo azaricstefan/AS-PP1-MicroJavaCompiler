@@ -5,6 +5,7 @@ import org.apache.log4j.*;
 import rs.ac.bg.etf.pp1.as.*;
 import rs.etf.pp1.symboltable.*;
 import rs.etf.pp1.symboltable.concepts.*;
+import rs.etf.pp1.mj.runtime.Code;
 
 
 parser code {:
@@ -51,6 +52,34 @@ parser code {:
     	if (info instanceof Symbol)
             msg.append (" na liniji ").append(((Symbol)info).left);
         log.info(msg.toString());
+    }
+
+    String kindToString(int kind){
+        StringBuilder msg = new StringBuilder();
+        switch(kind){
+            case Obj.Con: msg.append("Con");break;
+            case Obj.Var: msg.append("Var");break;
+            case Obj.Type: msg.append("Type");break;
+            case Obj.Meth: msg.append("Meth");break;
+            case Obj.Fld: msg.append("Fld");break;
+            case Obj.Elem: msg.append("Elem");break;
+            case Obj.Prog: msg.append("Prog");break;
+            case Obj.NO_VALUE: msg.append("RVALUE");break;
+        }
+        return msg.toString();
+    }
+
+    String structToString(Struct s){
+        StringBuilder msg = new StringBuilder();
+        switch(s.getKind()){
+            case Struct.None: msg.append("None(VOID)");break;
+            case Struct.Int: msg.append("Int");break;
+            case Struct.Char: msg.append("Char");break;
+            case Struct.Array: msg.append("Array of ").append(structToString(s.getElemType()));break;
+            case Struct.Class: msg.append("Class");break;
+            case Struct.Bool: msg.append("Bool");break;
+        }
+        return msg.toString();
     }
 :}
 
@@ -130,6 +159,8 @@ Program ::= PROG IDENT:pName
             {:
                 Tab.chainLocalSymbols(Tab.find(pName));
                 Tab.closeScope();
+                String tmp = mk.dump();
+                System.out.println(tmp);
                 Tab.dump(new MojTableVisitor());
                 if(!parser.errorDetected)
                     parser.log.info("Parsiranje uspesno zavrseno!");
@@ -150,10 +181,11 @@ DeclList ::= DeclList VarDecl
 				/* epsilon */
 				;
 VarDecl ::=     Type:cType
-                    {:
-                        constType = cType;
-                    :}
+                {:
+                    constType = cType;
+                :}
                 VarDecElemList SEMI;
+
 VarDecElem ::= IDENT:varName
                 {:
                     //parser.report_error("****************************************" + varName, null);
@@ -237,7 +269,9 @@ ConstDecl ::= CONST Type:cType
                 {:
                     constType = cType;
                 :}
-                ConstDeclList SEMI;
+                ConstDeclList SEMI
+                |
+                CONST error:e SEMI {: parser.report_error("Greska na liniji " + eleft + " : " + "losa deklaracija konstante" ,null); :};
 
 ConstDeclList ::= IDENT:constName EQUAL ConstVal:type
                     {:
@@ -282,12 +316,12 @@ Type ::= IDENT:ident
 		    Obj obj = Tab.find(ident);
 		    if(obj.getKind() != Obj.Type)
 		    {
-		         parser.report_error("Greska na liniji " + identleft+ ":"  + ident + " nije tip", null);
+		         parser.report_error("Greska na liniji " + identleft+ ": "  + ident + " nema tip", null);
 		         RESULT=Tab.noType;
 		    }
 		    else
 		        RESULT = obj.getType();
-		:} ;
+		:};
 
 MethodType ::= Type:type
                 {: RESULT = type; :}
@@ -415,20 +449,42 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
                 }
             :}
             |
-            READ LPAREN Designator RPAREN SEMI
+            READ LPAREN Designator:de RPAREN SEMI
             {:
+               if(de.getKind() != Obj.Var && de.getKind() != Obj.Fld && de.getKind() != Obj.Elem){
+                   parser.report_semantic_error(deleft, "Neocekivana kategorija simbola " + de.getName() +". Ocekivano: "+ "var elem ili field" +"; Dobijeno: "+ de.getType().getKind() +".");
+               }
+               if(de.getType().getKind() == Struct.Int || de.getType().getKind() == Struct.Bool && de.getType().getKind() == Struct.Char)
+                    RESULT = de; //CHECK
+               else{
+                    parser.report_semantic_error(deleft, "Argumenti READ funkcije moraju biti [int,char,bool].");
+                    RESULT = Tab.noObj;
+               }
                //TODO de je variabla tipa int, bool ili char
             :}
             |
-            PRINT LPAREN Expr COMMA NUMBER RPAREN SEMI
+            PRINT LPAREN Expr:e COMMA NUMBER:num RPAREN SEMI
             {:
+                if(e.getType().getKind() == Struct.Int || e.getType().getKind() == Struct.Bool && e.getType().getKind() == Struct.Char){
+                        RESULT = e;
+                }
+                else {
+                    parser.report_semantic_error(eleft, "Argumenti PRINT funkcije moraju biti [int,char,bool].");
+                    RESULT = Tab.noObj;
+                };
                //TODO: de je tipa int, bool ili char
                //Todo: num je tipa int
             :}
             |
-            PRINT LPAREN Expr RPAREN SEMI
+            PRINT LPAREN Expr:e RPAREN SEMI
             {:
-               mk.printCallCount++; //TODO: tipa int,...
+                if(e.getType().getKind() == Struct.Int){
+                    mk.printCallCount++; //TODO: tipa int,...
+                    RESULT = e;
+                } else {
+                    parser.report_semantic_error(eleft, "Argumenti PRINT funkcije moraju biti [int,char,bool].");
+                    RESULT = Tab.noObj;
+                }//CHECK RETURN
             :}
             |
             RETURN Expr:typeOfExpr SEMI
@@ -453,17 +509,17 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
             LBRACE StatementList RBRACE
             ;
 
-Condition ::= CondTerm
-              |
-              CondTerm OROR CondTerm;
+//Condition ::= CondTerm
+//              |
+//              CondTerm OROR CondTerm;
 
-CondTerm ::= CondFact
-             |
-             CondFact ANDAND CondFact;
+//CondTerm ::= CondFact
+//             |
+//             CondFact ANDAND CondFact;
 
-CondFact ::= Expr
-			 |
-			 Expr Relop Expr;
+//CondFact ::= Expr
+//			 |
+//			 Expr Relop Expr;
 
 
 
@@ -575,7 +631,7 @@ Designator ::=  IDENT:ident
 				:}
 				SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
 				{:
-				    RESULT = Tab.noObj; //CHECK
+				    RESULT = Tab.noObj; //CHECK [1]
                     if(des != Tab.noObj){
                         boolean arrOk = true;
                         if(des.getType().getKind() != Struct.Array){
@@ -593,7 +649,7 @@ Designator ::=  IDENT:ident
                     }
 
 				/*
-                    //TODO:  des treba da bude tipa array a expr tipa int
+                    //TODO[1]:  des treba da bude tipa array a expr tipa int
 				    if(des.getType().getKind() == Struct.Array && expr.getType().getKind() == Struct.Int)
 				    {
 				        RESULT = des;
@@ -604,12 +660,12 @@ Designator ::=  IDENT:ident
 				        RESULT = obj;
 				    }
 				    else
-				        RESULT = des;   // TODO: vraca tip elem niza elemType a tipa elemType za niz tipa int vraca int
+				        RESULT = des;   // TODO[1]: vraca tip elem niza elemType a tipa elemType za niz tipa int vraca int
 				        */
 				:};
 
 Assignop ::= EQUAL | AddopRight | MulopRight;
-Relop ::= EQUALEQUAL | NOTEQUAL | MORE | MOREOREQUAL | LESS | LESSOREQUAL;
+//Relop ::= EQUALEQUAL | NOTEQUAL | MORE | MOREOREQUAL | LESS | LESSOREQUAL;
 
 Expr ::= ComboExpr:expr
         {:  //nije int && nije char && nije bool
@@ -704,11 +760,32 @@ Addop ::=   AddopLeft | AddopRight
             {:
                  //TODO: fale svuda RESULT i vracaj COode.add .... Code.eq
             :};
-AddopLeft ::= PLUS | MINUS;
-AddopRight ::= PLUSEQUAL | MINUSEQUAL;//
+AddopLeft ::= PLUS {: RESULT = Code.add; :}
+              |
+              MINUS {: RESULT = Code.sub; :};
+AddopRight ::= PLUSEQUAL {: RESULT = Code.add; :}
+               |
+               MINUSEQUAL {: RESULT = Code.sub; :};
 
 Mulop ::= MulopLeft | MulopRight;
-MulopLeft ::= MUL | DIV | MOD;
-MulopRight ::= MULEQUAL | DIVEQUAL | MODEQUAL;
+MulopLeft ::=   MUL {: RESULT = Code.mul; :}
+                |
+                DIV {: RESULT = Code.div; :}
+                |
+                MOD {: RESULT = Code.rem; :};
+MulopRight ::=  MULEQUAL
+                {:
+                    RESULT = Code.mul;
+                :}
+                |
+                DIVEQUAL
+                {:
+                    RESULT = Code.div;
+                :}
+                |
+                MODEQUAL
+                {:
+                    RESULT = Code.rem;
+                :};
  
 			  
