@@ -577,26 +577,44 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
                if(de.getKind() != Obj.Var && de.getKind() != Obj.Fld && de.getKind() != Obj.Elem){
                    parser.report_semantic_error(deleft, "Neocekivana kategorija simbola " + de.getName() +". Ocekivano: "+ "var elem ili field" +"; Dobijeno: "+ de.getType().getKind() +".");
                }
-               if(de.getType().getKind() == Struct.Int || de.getType().getKind() == Struct.Bool && de.getType().getKind() == Struct.Char)
-                    RESULT = de; //CHECK
+               if(de.getType().getKind() == Struct.Int || de.getType().getKind() == Struct.Bool || de.getType().getKind() == Struct.Char)
+               {
+                    RESULT = de;
+
+                    if(!parser.errorDetected)
+                    {
+                        if(de.getType() == Tab.charType){
+                            Code.put(Code.bread);
+                        }else{
+                            Code.put(Code.read);
+                        }
+                        Code.store(de);
+                    }
+               }
                else{
                     parser.report_semantic_error(deleft, "Argumenti READ funkcije moraju biti [int,char,bool].");
                     RESULT = Tab.noObj;
                }
-               //TODO de je variabla tipa int, bool ili char
             :}
             |
             PRINT LPAREN Expr:e COMMA NUMBER:num RPAREN SEMI
             {:
                 if(e.getType().getKind() == Struct.Int || e.getType().getKind() == Struct.Bool && e.getType().getKind() == Struct.Char){
-                        RESULT = e;
+                    RESULT = e;
+
+                    if(!parser.errorDetected){
+                        Code.loadConst(num);
+                        if(e.getType() == Tab.charType){
+                            Code.put(Code.bprint);
+                        }else{
+                            Code.put(Code.print);
+                        }
+                    }
                 }
                 else {
                     parser.report_semantic_error(eleft, "Argumenti PRINT funkcije moraju biti [int,char,bool].");
                     RESULT = Tab.noObj;
                 };
-               //TODO: de je tipa int, bool ili char
-               //Todo: num je tipa int
             :}
             |
             PRINT LPAREN Expr:e RPAREN SEMI
