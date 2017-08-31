@@ -6,6 +6,7 @@ import rs.ac.bg.etf.pp1.as.*;
 import rs.etf.pp1.symboltable.*;
 import rs.etf.pp1.symboltable.concepts.*;
 import rs.etf.pp1.mj.runtime.Code;
+import java.io.*;
 
 
 parser code {:
@@ -162,8 +163,13 @@ Program ::= PROG IDENT:pName
                 String tmp = mk.dump();
                 System.out.println(tmp);
                 Tab.dump(new MojTableVisitor());
-                if(!parser.errorDetected)
+                if(!parser.errorDetected){
                     parser.log.info("Parsiranje uspesno zavrseno!");
+                    File objFile = new File("test/program.obj");
+                    if(objFile.exists())
+                        objFile.delete();
+                    Code.write(new FileOutputStream(objFile));
+                }
                 else
                     parser.log.error("Parsiranje NIJE uspesno zavrseno!");
             :} ;
@@ -337,44 +343,48 @@ MethodDeclList ::= MethodDeclList MethodDecl
 MethodDecl ::=  MethodType:type IDENT:funName
                 {:
                     currentMethod = MojaTabela.insert(Obj.Meth,funName,type);
-                    Tab.openScope();
+                    currentMethod.setLevel(0);
                     parser.report_info("Obradjuje se funkcija: " + funName + " na liniji " + funNameleft, null);
-                    //todo: neka promenljiva brPar=0;
-                    //CHECK
-                    int numOfParameters = 0;
+                    Tab.openScope();
+
                 :}
-                LPAREN
+                LPAREN FormPars:formPars RPAREN VarDeclList LBRACE
                 {:
+
+                    currentMethod.setAdr(Code.pc);
+                    if("main".equals(funName)){
+                        Code.mainPc = currentMethod.getAdr();
+                    }
+                    Code.put(Code.enter);
+                    Code.put(currentMethod.getLevel()); //broj argumenata enter funkcije //drugi operand koliko ukupno arg i lok prom a prvi da
+                    Code.put(Tab.currentScope().getnVars()-currentMethod.getLevel()); //daje broj promenljivih
+
+
                     inFunction = true;
                     if(funName.equals("main")){
                         inMain = true;
                     }
-                :}
-                FormPars:formPars RPAREN
-                {:
                     if(currentMethod.getName().equals("main") && currentMethod.getLevel() > 0){
                         parser.report_semantic_error(formParsleft, "Metoda main ne sme imati parametre.");
                     }
-                    //Tab.currentScope().setLevel(numOfParameters);      //CHECK FORM PARS
-                    currentMethod.setLevel(currentMethod.getLevel()+1); //CHECK is level ok...?
-                    //TODO currentscope.setLevel(numPar);
-                :}
-                VarDeclList LBRACE
-                {:
+
                     //TODO ovde ide gen koda za ulaz u metodu
-                    inFunction = false;
-                    //inMain = false;
+
                 :}
                 StatementList RBRACE
                 {:
-                    if(!returnFound && type != Tab.noType && inMain == false) //ovo je i za void
+                    if(!returnFound && type != Tab.noType) //&& inMain == false)//da bi i za main proveravao RETURN   //ovo je i za void
                         parser.report_error("Semanticka greska na liniji " + typeleft + ": funkcija " + funName + " nema RETURN iskaz", null); //CHECK return iskaz
-                    inMain = false;
-                    currentMethod = null;
-                    returnFound = false;
+
+                    Code.put(Code.exit); //zavrsne instrukcije metode
+                    Code.put(Code.return_);
 
                     Tab.chainLocalSymbols(Tab.find(funName));
                     Tab.closeScope();
+                     inFunction = false;
+                    inMain = false; //ovo treba posle closeScope!
+                    currentMethod = null;
+                    returnFound = false;
                 :};
 
 FormPars ::= FormalParamList | /* epsilon */ ;
@@ -386,7 +396,6 @@ FormalParamList ::= FormalParamList COMMA FormalParamDecl
 
 FormalParamDecl ::= Type:type IDENT:ident
  {:
-    numOfParameters++;
     if(Tab.currentScope().findSymbol(ident) == Tab.noObj)
     {
         parser.report_error("Greska na liniji " + typeleft + " vec postoji simbol sa imenom: " + ident, null);
@@ -394,7 +403,9 @@ FormalParamDecl ::= Type:type IDENT:ident
     }
     else
     {
-        Tab.insert(Obj.Var, ident, type); //CHECK
+        numOfParameters++;
+        Tab.insert(Obj.Var, ident, type);
+        currentMethod.setLevel(currentMethod.getLevel()+1);
     }
                                         //TODO numPar++;,   dodajes u scope metode ovaj iden
  :};
@@ -426,14 +437,26 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
             Designator EQUAL error SEMI
             {: parser.log.debug("Izraz tipa: nesto = XX; XX je lose. Uspesan oporavak od greske pri dodeli vrednosti."); :}
             |
-            Designator PLUSPLUS SEMI
+            Designator:des PLUSPLUS SEMI
             {:
-                //TODO   des mora da je int
+                if(des.getType().getKind() == Struct.Int){
+                    RESULT = des;
+                }
+                else{
+                    parser.report_error("Izraz: " + des + " na liniji: " + desleft + " nije tipa int!",null);
+                    RESULT = Tab.noObj;
+                }
             :}
             |
-            Designator MINUSMINUS SEMI
+            Designator:des MINUSMINUS SEMI
             {:
-                //TODO   des mora da je int
+                if(des.getType().getKind() == Struct.Int){
+                    RESULT = des;
+                }
+                else{
+                    parser.report_error("Izraz: " + des + " na liniji: " + desleft + " nije tipa int!",null);
+                    RESULT = Tab.noObj;
+                }
             :}
             |
             Designator:func LPAREN ActualPars RPAREN SEMI
@@ -480,11 +503,18 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
             {:
                 if(e.getType().getKind() == Struct.Int){
                     mk.printCallCount++; //TODO: tipa int,...
-                    RESULT = e;
-                } else {
+                    RESULT = e; //CHECK RETURN
+                    Code.loadConst(5);
+                    Code.put(Code.print);
+                } else if(e.getType().getKind() == Struct.Char){
+                    Code.loadConst(1);
+                    Code.put(Code.bprint);
+                }
+                else{
                     parser.report_semantic_error(eleft, "Argumenti PRINT funkcije moraju biti [int,char,bool].");
                     RESULT = Tab.noObj;
-                }//CHECK RETURN
+                }
+
             :}
             |
             RETURN Expr:typeOfExpr SEMI
@@ -545,17 +575,25 @@ Factor ::=  Designator:des
 			|
 			NUMBER:num
 			{:
-				RESULT = new Obj(Obj.Con, "", Tab.intType, num, Obj.NO_VALUE);
+			    Obj obj =  new Obj(Obj.Con, "", Tab.intType, num, Obj.NO_VALUE);
+                //Obj obj = Tab.insert(Obj.Con,"",Tab.intType); //CHECK NUMBER
+                //obj.setAdr(num.intValue());
+                Code.load(obj);
+				RESULT = obj;
 			:}
 			|
 			CHAR:c
 			{:
-				RESULT = new Obj(Obj.Con, "", Tab.charType, c, Obj.NO_VALUE);
+			    Obj obj = new Obj(Obj.Con, "", Tab.charType, c, Obj.NO_VALUE);
+			    Code.load(obj);
+				RESULT = obj;
 			:}
 			|
 			BOOL:bo
 			{:
-				RESULT = new Obj(Obj.Con, "", MojaTabela.boolType, bo?1:0, Obj.NO_VALUE);
+			    Obj obj = new Obj(Obj.Con, "", MojaTabela.boolType, bo?1:0, Obj.NO_VALUE);
+			    Code.load(obj);
+				RESULT = obj;
 			:}
 			|
 			NEW Type:t
