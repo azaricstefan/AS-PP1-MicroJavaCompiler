@@ -36,6 +36,15 @@ parser code {:
         log.error(msg.toString());
     }
 
+    public void report_semantic_error(int line, String description){
+        StringBuilder msg = new StringBuilder("Semanticka greska na liniji ");
+        if(description != null){
+            msg.append(line).append(": ");
+            msg.append(description);
+        }
+        log.error(msg.toString());
+        errorDetected = true;
+    }
 
     public void report_info(String message, Object info) {
     	StringBuilder msg = new StringBuilder(message); 
@@ -66,6 +75,9 @@ action code {:
 	Struct constType = null;
 
 	boolean returnFound = false;
+
+	//brojanje parametara
+	int numOfParameters = 0;
 
     //da li je ime deklarisano u trenutnom opsegu
     boolean checkName(String name){
@@ -294,6 +306,8 @@ MethodDecl ::=  MethodType:type IDENT:funName
                     Tab.openScope();
                     parser.report_info("Obradjuje se funkcija: " + funName + " na liniji " + funNameleft, null);
                     //todo: neka promenljiva brPar=0;
+                    //CHECK
+                    int numOfParameters = 0;
                 :}
                 LPAREN
                 {:
@@ -302,8 +316,13 @@ MethodDecl ::=  MethodType:type IDENT:funName
                         inMain = true;
                     }
                 :}
-                FormPars RPAREN
+                FormPars:formPars RPAREN
                 {:
+                    if(currentMethod.getName().equals("main") && currentMethod.getLevel() > 0){
+                        parser.report_semantic_error(formParsleft, "Metoda main ne sme imati parametre.");
+                    }
+                    //Tab.currentScope().setLevel(numOfParameters);      //CHECK FORM PARS
+                    currentMethod.setLevel(currentMethod.getLevel()+1); //CHECK is level ok...?
                     //TODO currentscope.setLevel(numPar);
                 :}
                 VarDeclList LBRACE
@@ -331,9 +350,19 @@ FormalParamList ::= FormalParamList COMMA FormalParamDecl
 					FormalParamDecl
 					;
 
-FormalParamDecl ::= Type IDENT
+FormalParamDecl ::= Type:type IDENT:ident
  {:
- //TODO numPar++;,   dodajes u scope metode ovaj iden
+    numOfParameters++;
+    if(Tab.currentScope().findSymbol(ident) == Tab.noObj)
+    {
+        parser.report_error("Greska na liniji " + typeleft + " vec postoji simbol sa imenom: " + ident, null);
+        RESULT = Tab.noObj;
+    }
+    else
+    {
+        Tab.insert(Obj.Var, ident, type); //CHECK
+    }
+                                        //TODO numPar++;,   dodajes u scope metode ovaj iden
  :};
 
 StatementList ::= StatementList Statement
@@ -536,42 +565,67 @@ Designator ::=  IDENT:ident
                     RESULT=Tab.find(ident);
                 :}
 				|
-				Designator:des SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
+				Designator:des
 				{:
-				    //nadji element tipa i vrati taj TYPE!//TODO:  des treba da bude tipa array a expr tipa int
+                    if(des != Tab.noObj){
+                        if(des.getType().getKind() != Struct.Array){
+                            parser.report_semantic_error(desleft,"Simbol "+ des.getName()+  " ne predstavlja niz.");
+                        }
+                    }
+				:}
+				SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
+				{:
+				    RESULT = Tab.noObj; //CHECK
+                    if(des != Tab.noObj){
+                        boolean arrOk = true;
+                        if(des.getType().getKind() != Struct.Array){
+                            arrOk = false;
+                        }
+                        if(expr.getType() != Tab.intType){
+                            parser.report_error("Tipovi se ne poklapaju! 1: " + des + " 2: " + expr, null);
+                            arrOk = false;
+                        }
+
+                        if(arrOk){
+                            parser.log.debug("Designator tip(3 je array): " + des.getType().getKind() + " Expression tip(1 je int): " + expr.getType().getKind());
+                            RESULT = new Obj(Obj.Elem, des.getName()+"[]", des.getType().getElemType(), des.getAdr(), des.getLevel());
+                        }
+                    }
+
+				/*
+                    //TODO:  des treba da bude tipa array a expr tipa int
+				    if(des.getType().getKind() == Struct.Array && expr.getType().getKind() == Struct.Int)
+				    {
+				        RESULT = des;
+				    }
 				    Struct elemType = des.getType().getElemType();
 				    if(elemType.getKind() == Struct.Int){
 				        Obj obj = new Obj(Obj.Var, "", Tab.intType);
 				        RESULT = obj;
-				    } else
-				    //parser.report_error("Designator NIZ: tip elementa:" + elemType.getKind(),null);
-				    RESULT = des;   // TODO: vraca tip elem niza elemType a tipa elemType za niz tipa int vraca int
+				    }
+				    else
+				        RESULT = des;   // TODO: vraca tip elem niza elemType a tipa elemType za niz tipa int vraca int
+				        */
 				:};
 
 Assignop ::= EQUAL | AddopRight | MulopRight;
 Relop ::= EQUALEQUAL | NOTEQUAL | MORE | MOREOREQUAL | LESS | LESSOREQUAL;
 
 Expr ::= ComboExpr:expr
-        {:
-            //nije int && nije char && nije bool
-            if(expr.getType() != Tab.intType && expr.getType() != Tab.charType && expr.getType() != MojaTabela.boolType){
+        {:  //nije int && nije char && nije bool
+            if(expr.getType() != Tab.intType && expr.getType() != Tab.charType && expr.getType() != MojaTabela.boolType && expr.getType().getKind() != Struct.Array){
                 parser.log.debug("Tip: " + expr.getType().getKind());
-                //TODO: provera getElemType
-                if(expr.getType().getKind() != Struct.Array){// TODO mislim da je ovo treba gore
-                    parser.report_error("Greska na liniji " + exprleft + " nije int tipa | ID[1] => " + expr.getType().getKind(), null);
-                }
-                RESULT = Tab.noObj; //NULL...
-            } else{
+                parser.report_error("Greska na liniji " + exprleft + " nije int tipa | ID[1] => " + expr.getType().getKind(), null);
+                RESULT = Tab.noObj;
+            } else
                 RESULT = expr;
-            }
-                //RESULT = expr;
         :}
          |
          MINUS ComboExpr:expr
          {:
             if(expr.getType() != Tab.intType){
                 parser.report_error("Greska na liniji " + exprleft + " nije int tipa | ID[2]", null);
-                RESULT = Tab.noObj; //NULL...
+                RESULT = Tab.noObj;
             } else{
                 RESULT = expr;
             }
@@ -586,7 +640,9 @@ ComboExpr ::=   AddTerm:addTerm CombOp ComboExpr:comboExpr
                     else if(addTerm.getType() != Tab.intType || comboExpr.getType() != Tab.intType){
                         parser.report_error("Greska na liniji " + addTermleft + " nije int tipa | ID[3]" + "addterm tip:" + addTerm.getType().getKind() + "comboExpr tip: " + comboExpr.getType().getKind(), null); //bodovi = (niz[1]/=niz[0]);
                         RESULT = Tab.noObj; //NULL...
-                    } else{
+                    }
+                    else
+                    {
                         if(addTerm.getType().equals(comboExpr.getType()) && comboExpr.getType() == Tab.intType)
                             RESULT = addTerm;
                         else
