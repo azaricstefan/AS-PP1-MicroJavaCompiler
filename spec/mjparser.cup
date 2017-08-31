@@ -7,6 +7,7 @@ import rs.etf.pp1.symboltable.*;
 import rs.etf.pp1.symboltable.concepts.*;
 import rs.etf.pp1.mj.runtime.Code;
 import java.io.*;
+import java.util.*;
 
 
 parser code {:
@@ -113,6 +114,8 @@ action code {:
     boolean checkName(String name){
         return Tab.currentScope().findSymbol(name) == null;
     }
+
+    Stack<List<Obj>> actualParamsList = new Stack<List<Obj>>();
 :}
 
 
@@ -243,13 +246,13 @@ VarDecElemList ::=  VarDecElem COMMA VarDecElemList
 					{:
 
 						parser.report_error("Sintaksna greska na liniji " + errleft + " pogresna deklaracija globalne promenljive | ZAREZ!" , null);
-						parser.report_info("Uspesan oporovak od greske na liniji" + errleft + "."  , null);
+						parser.report_info("Uspesan oporovak od greske na liniji " + errleft + "."  , null);
 					:}
 					|
 					error:err
 					{:
 						parser.report_error("Sintaksna greska na liniji " + errleft + " pogresna deklaracija globalne promenljive!" , null);
-						parser.report_info("Uspesan oporovak od greske na liniji" + errleft + "."  , null);
+						parser.report_info("Uspesan oporovak od greske na liniji " + errleft + "."  , null);
 					:}
 					;
 
@@ -350,7 +353,16 @@ MethodDecl ::=  MethodType:type IDENT:funName
                     Tab.openScope();
 
                 :}
-                LPAREN FormPars:formPars RPAREN VarDeclList LBRACE
+                LPAREN
+                {:
+                    actualParamsList.push(new ArrayList<Obj>()); //CHECK [9]
+                :}
+                 FormPars:formPars RPAREN{:
+                 inFunction = true;
+                 if(funName.equals("main")){
+                     inMain = true;
+                 }
+                 :} VarDeclList LBRACE
                 {:
 
                     currentMethod.setAdr(Code.pc);
@@ -362,10 +374,7 @@ MethodDecl ::=  MethodType:type IDENT:funName
                     Code.put(Tab.currentScope().getnVars()-currentMethod.getLevel()); //daje broj promenljivih
 
 
-                    inFunction = true;
-                    if(funName.equals("main")){
-                        inMain = true;
-                    }
+
                     if(currentMethod.getName().equals("main") && currentMethod.getLevel() > 0){
                         parser.report_semantic_error(formParsleft, "Metoda main ne sme imati parametre.");
                     }
@@ -472,12 +481,39 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
             {:
                 if (Obj.Meth == func.getKind())
                 {
+                    if(!actualParamsList.isEmpty()){
+                        List<Obj> stvarniParametri = actualParamsList.pop();
+                        Collection<Obj> formalniParametri = func.getLocalSymbols();//.getType().getMembers();
+                        //if(formalniParametri.size() - func.getLevel() != stvarniParametri.size()){ //- func.getLevel() ovo predstavlja promenljive deklarisane u funkciji!
+                        if(func.getLevel() != stvarniParametri.size()){ //- func.getLevel() ovo predstavlja promenljive deklarisane u funkciji!
+                            parser.report_error("Ne slaze se broj stvarnih i formalnih parametara [linija: " + funcleft + "]", null);
+                        }
+                        else{
+                            //OVDE PROVERA DA LI SU SVI ISTOG TIPA!
+                            int i = 0;
+                            for(Obj fp : formalniParametri){
+                                if(i == stvarniParametri.size())
+                                    break; //izadji pre nego sto krene da cita promenljive koje nisu argumenti!
+                                if(fp.getType().getKind() != stvarniParametri.get(i++).getType().getKind()){
+                                    parser.report_error("Ne slazu se tipovi stvarnih i formalnih parametara [linija: " + funcleft + "]", null);
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        parser.report_info("Funkcija: " + func.getName() + "nema argumente [linija: " + funcleft + "]", null);
+                    }
+                    //TODO: sa steka parametre i uporedjivati[9] ovde se poziva //CHECK
+
                     parser.report_info("[Matched]Pronadjen poziv funkcije " + func.getName() + " na liniji " + funcleft, null);
                     RESULT = func.getType();
 
                     int destAdr = func.getAdr() - Code.pc; //PC relativna adresa
                     Code.put(Code.call);
                     Code.put2(destAdr); //PC relativan skok
+                    if(func.getType() != Tab.noType){
+                        Code.put(Code.pop); //skini vrednost sa expression steka
+                    }
                 }
                 else{
                     parser.report_error("[Matched]Greska na liniji " + funcleft + " : ime " + func.getName() + " nije funkcija!", null);
@@ -572,19 +608,31 @@ Factor ::=  Designator:des
 				RESULT = des;
 			:}
 		    |
-		   	Designator:func LPAREN ActualPars RPAREN
+		   	Designator:func
 		   	{:
+		   	    actualParamsList.push(new ArrayList<Obj>());
 
+		   	:}
+		   	LPAREN ActualPars RPAREN
+		   	{:
 				if (Obj.Meth == func.getKind())
 				{
 				    parser.report_info("Pronadjen poziv funkcije " + func.getName() + " na liniji " + funcleft, null);
-				    RESULT = func;
+
+				    if(func.getType() == Tab.noType)
+				        parser.report_semantic_error(funcleft,"Funkcija "+ func.getName()+  " ne moze da se koristi u izrazima jer nema povratnu vrednost.");
+				    else{
+                        int destAdr = func.getAdr() - Code.pc; //PC relativna adresa
+                        Code.put(Code.call);
+                        Code.put2(destAdr); //PC relativan skok
+				    }
+                    RESULT = func;
                 }
                 else{
                     parser.report_error("Greska na liniji " + funcleft + " : ime " + func.getName() + " nije funkcija!", null);
                     RESULT = Tab.noObj;
                 }
-                //TODO: DA LI SE STVARNI PARAMETRI SLAZU SA FORMALNIM [dodati proveru] preko steka ovo ide
+                //TODO: DA LI SE STVARNI PARAMETRI SLAZU SA FORMALNIM [dodati proveru] preko steka ovo ide [9]
 			:}
 			|
 			NUMBER:num
@@ -646,9 +694,15 @@ ActualPars ::= ActualParamList
 			   /* epsilon */
 			   ;
 
-ActualParamList ::= ActualParamList COMMA Expr //TODO ovde je jebada, moras da imas svoj stek u kome sacuvaj ove tipove
+ActualParamList ::= ActualParamList:apl COMMA Expr:e
+                    {:
+                        actualParamsList.peek().add(e);
+                    :}
 					|
-					Expr
+					Expr:e
+					 {:
+                        actualParamsList.peek().add(e);
+                    :}
 					;
 
 Designator ::=  IDENT:ident
