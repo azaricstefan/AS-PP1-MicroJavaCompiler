@@ -95,6 +95,32 @@ scan with {:
 init with {:
     MojaTabela.mojaInicijalizacija();
 	//Tab.init(); // Universe scope
+
+    //definicija metoda
+    Tab.find("chr").setAdr(Code.pc);
+    Code.put(Code.enter);
+    Code.put(1);
+    Code.put(1);
+    Code.put(Code.load_n);
+    Code.put(Code.exit);
+    Code.put(Code.return_);
+
+    Tab.find("ord").setAdr(Code.pc);
+    Code.put(Code.enter);
+    Code.put(1);
+    Code.put(1);
+    Code.put(Code.load_n);
+    Code.put(Code.exit);
+    Code.put(Code.return_);
+
+    Tab.find("len").setAdr(Code.pc);
+    Code.put(Code.enter);
+    Code.put(1);
+    Code.put(1);
+    Code.put(Code.load_n);
+    Code.put(Code.arraylength);
+    Code.put(Code.exit);
+    Code.put(Code.return_);
 :}
 
 action code {:
@@ -529,7 +555,6 @@ Matched ::= Designator:destination Assignop Expr:expression SEMI
                     } else {
                         parser.report_info("Funkcija: " + func.getName() + "nema argumente [linija: " + funcleft + "]", null);
                     }
-                    //TODO: sa steka parametre i uporedjivati[9] ovde se poziva //CHECK
 
                     parser.report_info("[Matched]Pronadjen poziv funkcije " + func.getName() + " na liniji " + funcleft, null);
                     RESULT = func.getType();
