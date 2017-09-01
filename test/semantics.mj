@@ -1,0 +1,46 @@
+// Test301
+
+program semantics
+    const int const1 = 10, const2 = 4;
+    const char chara = 'a';
+    const bool flagt = true;
+    const bool flagf = false;
+
+    int niz1[];
+
+    int a;
+
+    const int pi = 3, e = 2;
+
+    int niz2[], glob1;
+{
+    int someFunc(int b) int c[], z;
+    {
+        print(a);
+        print(c[a]*a + 2 % 3);
+        a = a += (-((-2)*3));
+        read(c[2]);
+        //b = null;
+        return 3;
+    }
+
+    void main()int p; bool c[]; int i; int x[], z[];
+    {
+        z = new int[5];
+        x = new int[3];
+        i=0;
+        read(i);
+
+        chr(const1);
+        ord('a');
+        len(c);
+        i += i / someFunc(5);
+
+
+        {//some block
+            print('h');
+        }
+
+        print(3);
+    }
+}

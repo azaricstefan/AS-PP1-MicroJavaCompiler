@@ -1,0 +1,30 @@
+program P
+    const T flagt = true; const bool flagf = false;
+    const int const1 = 'a', const2=2;
+{
+    int someFunc(int i, int b) int c[], z, b; const2;
+    {
+        const2 = p+i;
+        b = true;
+        flagf++;
+        read(const2);
+        read(c);
+        print(c);
+        return;
+    }
+
+    void voidFunc(){
+        return 2;
+    }
+
+    int main(int a)int p; bool c[]; int i; int x[], z[];
+    {
+        someFunc();
+        someFunc('a');
+        i = -true;
+        i = x+false += i;
+        i();
+        c = new bool[true];
+        i = x[c];
+    }
+}

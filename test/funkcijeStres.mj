@@ -1,0 +1,65 @@
+program funkcijeNizovi
+{
+    void abeceda(
+        char a1,
+        char a2,
+        char a3,
+        char a4,
+        char a5,
+        char a6,
+        char a7,
+        char a8,
+        char a9,
+        char a10,
+        char a11,
+        char a12,
+        char a13,
+        char a14,
+        char a15,
+        char a16,
+        char a17,
+        char a18,
+        char a19,
+        char a20,
+        char a21,
+        char a22,
+        char a23,
+        char a24,
+        char a25,
+        char a26
+        ){
+            print(a1);
+            print(a2);
+            print(a3);
+            print(a4);
+            print(a5);
+            print(a6);
+            print(a7);
+            print(a8);
+            print(a9);
+            print(a10);
+            print(a11);
+            print(a12);
+            print(a13);
+            print(a14);
+            print(a15);
+            print(a16);
+            print(a17);
+            print(a18);
+            print(a19);
+            print(a20);
+            print(a21);
+            print(a22);
+            print(a23);
+            print(a24);
+            print(a25);
+            print(a26);
+            print(eol);
+        }
+
+    void main()int niz1[], niz2[], niz3[];
+    {
+       abeceda('a','b','c','d','e','f', 'g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z');
+    }
+}
+
