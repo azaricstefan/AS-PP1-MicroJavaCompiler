@@ -1,0 +1,1 @@
+CUP User manual: http://www2.cs.tum.edu/projects/cup/manual.html
