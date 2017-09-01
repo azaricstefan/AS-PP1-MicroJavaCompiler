@@ -82,6 +82,7 @@ import java_cup.runtime.Symbol;
 "]" 		{ return new_symbol(sym.SQUAREBRACKETRIGHT, yytext()); }
 "{" 		{ return new_symbol(sym.LBRACE, yytext()); }
 "}"			{ return new_symbol(sym.RBRACE, yytext()); }
+"null"      { return new_symbol(sym.NULL, yytext()); }
 
 "//" 		     { yybegin(COMMENT); }
 <COMMENT> .      { yybegin(COMMENT); }
