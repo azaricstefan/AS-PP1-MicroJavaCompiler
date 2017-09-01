@@ -7,8 +7,9 @@ public class MojaKlasa {
 	public int globalVars = 0;
 	public int inMainVars = 0;
 	public int globalConsts = 0;
-	
-	public String dump(){
+
+    //SINTAKSNA ANALIZA DUMP
+    public String dump(){
 		StringBuilder sb = new StringBuilder();
         sb.append("=====================SINTAKSNA ANALIZA=========================" + "\n");
         sb.append("Broj Print poziva: " + printCallCount + "\n");

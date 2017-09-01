@@ -166,6 +166,8 @@ init with {:
     MojaTabela.mojaInicijalizacija();
 	//Tab.init(); // Universe scope
 
+    Tab.insert(Obj.NO_VALUE, "null", new Struct(Struct.None));
+
     //definicija metoda
     Tab.find("chr").setAdr(Code.pc);
     Code.put(Code.enter);
@@ -221,6 +223,7 @@ terminal PLUS, MINUS, MUL, DIV, MOD, EQUALEQUAL, NOTEQUAL, LESS, LESSOREQUAL, AN
 terminal EQUAL, PLUSEQUAL, MINUSEQUAL, DIVEQUAL, MODEQUAL, PLUSPLUS, MINUSMINUS;
 terminal SEMI, COMMA, DOT, SQUAREBRACKETLEFT, SQUAREBRACKETRIGHT, LBRACE, RBRACE, LPAREN, RPAREN;
 terminal ANDAND, OROR, MOREOREQUAL, MORE, MULEQUAL;
+terminal NULL;
 
 terminal Boolean BOOL;
 terminal Character CHAR;
@@ -296,7 +299,11 @@ VarDecl ::=     Type:cType
                 :}
                 VarDecElemList SEMI
                 |
-                error:err SEMI;
+                error:err SEMI
+                {:
+                parser.report_error("Sintaksna greska na liniji " + errleft + " pogresna deklaracija globalne promenljive!" , null);
+                parser.report_info("Uspesan oporovak od greske na liniji " + errleft + "."  , null);
+                :};
 
 VarDecElem ::= IDENT:varName
                 {:
@@ -362,7 +369,7 @@ VarDecElemList ::=  VarDecElem COMMA VarDecElemList
 ConstVal ::= NUMBER:num
             {:
                 mk.globalConsts++;
-                RESULT =  new Obj(Obj.Con, "", Tab.intType, num, Obj.NO_VALUE);
+                RESULT =  new Obj(Obj.Con, "numConst", Tab.intType, num, Obj.NO_VALUE);
 
 
             :}
@@ -370,16 +377,15 @@ ConstVal ::= NUMBER:num
 			 BOOL:bo
             {:
                 mk.globalConsts++;
-                RESULT = new Obj(Obj.Con, "", MojaTabela.boolType, bo?1:0, Obj.NO_VALUE);
+                RESULT = new Obj(Obj.Con, "boolConst", MojaTabela.boolType, bo?1:0, Obj.NO_VALUE);
             :}
 			 |
 			 CHAR:c
             {:
                 mk.globalConsts++;
-                RESULT = new Obj(Obj.Con, "", Tab.charType, c, Obj.NO_VALUE);
-            :}
-            NUMBER:num
-			 ;
+                RESULT = new Obj(Obj.Con, "charConst", Tab.charType, c, Obj.NO_VALUE);
+            :};
+
 ConstDecl ::= CONST Type:cType
                 {:
                     constType = cType;
@@ -490,7 +496,7 @@ MethodDecl ::=  MethodType:type IDENT:funName
                 StatementList RBRACE
                 {:
                     if(!returnFound && type != Tab.noType && inMain == false)  //ovo je i za void
-                        parser.report_error("Semanticka greska na liniji " + typeleft + ": funkcija " + funName + " nema RETURN iskaz", null); //CHECK return iskaz
+                        parser.report_error("Semanticka greska na liniji " + typeleft + ": funkcija " + funName + " nema RETURN iskaz(ili prazan RETURN bez vrednosti)", null); //CHECK return iskaz
                     if(type != Tab.noType && inMain == true){
                         parser.report_error("Semanticka greska na liniji " + typeleft + ": funkcija " + funName + " mora biti VOID!", null); //CHECK return iskaz
                     }
@@ -880,6 +886,7 @@ Factor ::=  Designator:des
                                     parser.report_error("Ne slazu se tipovi stvarnih i formalnih parametara [linija: " + funcleft + "]", null);
                                     break;
                                 }
+                                parser.report_usage(funcleft,func," argument: "+ i +" metode" );
                             }
                         }
                     } else {
@@ -936,6 +943,13 @@ Factor ::=  Designator:des
 			        Code.load(obj);
 				RESULT = obj;
 			:}
+			|
+			NULL:nu
+            {:
+                parser.log.info("Null: " + nu + " na liniji: " + nuleft,null); //Todo: beautify this
+                Obj obj = new Obj(Obj.NO_VALUE, "", MojaTabela.noType, 0, Obj.NO_VALUE);
+                RESULT = obj;
+            :}
 			|
 			NEW Type:t
 			{:
