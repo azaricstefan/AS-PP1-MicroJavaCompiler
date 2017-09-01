@@ -1,0 +1,17 @@
+<component name="libraryTable">
+  <library name="java-cup-11a">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/Cup_support.jar!/" />
+      <root url="jar://$PROJECT_DIR$/java-cup-11a.jar!/" />
+      <root url="jar://$PROJECT_DIR$/JFlex.jar!/" />
+      <root url="jar://$PROJECT_DIR$/log4j-1.2.17.jar!/" />
+      <root url="jar://$PROJECT_DIR$/mj-runtime.jar!/" />
+      <root url="jar://$PROJECT_DIR$/symboltable.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/mj-runtime.jar!/" />
+      <root url="jar://$PROJECT_DIR$/symboltable.jar!/" />
+    </SOURCES>
+  </library>
+</component>
