@@ -56,6 +56,76 @@ parser code {:
         log.info(msg.toString());
     }
 
+
+    public void report_usage(int line, Obj symbol, String context){
+        if(symbol == Tab.noObj) return;
+        StringBuilder msg = new StringBuilder("Nadjeno koriscenje simbola ");
+        msg.append(symbol.getName());
+        switch (symbol.getKind()){
+
+        case Obj.Var:
+            if(symbol.getLevel() == 0)
+                msg.append("("+"globVar"+")");
+            else
+            {
+                if(symbol.getFpPos()>0 || (this.action_obj.currentMethod.getLevel()>0 && Tab.currentScope.values().iterator().next() == symbol))
+                    msg.append("("+"formalParam"+")");
+                else msg.append("("+"localVar"+")");
+            }
+            break;
+        case Obj.Con:
+            msg.append("("+"Con"+")");
+            break;
+        case Obj.Elem:
+            msg.append("("+"arrayElem"+")");
+            break;
+        case Obj.Meth:
+            msg.append("("+"globFunc"+")");
+            break;
+        }
+        msg.append(" na liniji ")
+           .append(line).append("; ");
+
+        switch(symbol.getKind()){ //kindTo text
+            case Obj.Con: msg.append("Con");break;
+            case Obj.Var: msg.append("Var");break;
+            case Obj.Type: msg.append("Type");break;
+            case Obj.Meth: msg.append("Meth");break;
+            case Obj.Fld: msg.append("Fld");break;
+            case Obj.Elem: msg.append("Elem");break;
+            case Obj.Prog: msg.append("Prog");break;
+            case Obj.NO_VALUE: msg.append("RVALUE");break;
+        }
+
+        msg.append(" ").append(symbol.getName()).append(": ");
+
+        switch(symbol.getType().getKind()){ //structTo text
+            case Struct.None: msg.append("None(VOID)");break;
+            case Struct.Int: msg.append("Int");break;
+            case Struct.Char: msg.append("Char");break;
+            case Struct.Array: msg.append("Array of ");
+
+                switch(symbol.getType().getElemType().getKind()){ //structTo text again
+                    case Struct.None: msg.append("None(VOID)");break;
+                    case Struct.Int: msg.append("Int");break;
+                    case Struct.Char: msg.append("Char");break;
+                    case Struct.Class: msg.append("Class");break;
+                    case Struct.Bool: msg.append("Bool");break;
+                }
+                break;
+            case Struct.Class: msg.append("Class");break;
+            case Struct.Bool: msg.append("Bool");break;
+        }
+
+        msg.append(", ").append(symbol.getAdr());
+        msg.append(", ").append(symbol.getLevel());
+
+       if(context!=null){
+          msg.append("; Kontekst: ").append(context);
+       }
+
+      log.info(msg.toString());
+    }
 //    String kindToString(int kind){
 //        StringBuilder msg = new StringBuilder();
 //        switch(kind){
@@ -224,7 +294,9 @@ VarDecl ::=     Type:cType
                 {:
                     constType = cType;
                 :}
-                VarDecElemList SEMI;
+                VarDecElemList SEMI
+                |
+                error:err SEMI;
 
 VarDecElem ::= IDENT:varName
                 {:
@@ -383,7 +455,7 @@ MethodDecl ::=  MethodType:type IDENT:funName
                 {:
                     currentMethod = MojaTabela.insert(Obj.Meth,funName,type);
                     currentMethod.setLevel(0);
-                    parser.report_info("Obradjuje se funkcija: " + funName + " na liniji " + funNameleft, null);
+                    parser.report_info("Deklarisana je funkcija: " + funName + " na liniji " + funNameleft, null);
                     Tab.openScope();
 
                 :}
@@ -414,9 +486,6 @@ MethodDecl ::=  MethodType:type IDENT:funName
                     if(currentMethod.getName().equals("main") && currentMethod.getLevel() > 0){
                         parser.report_semantic_error(formParsleft, "Metoda main ne sme imati parametre.");
                     }
-
-                    //TODO ovde ide gen koda za ulaz u metodu
-
                 :}
                 StatementList RBRACE
                 {:
@@ -557,6 +626,7 @@ Matched ::= Designator:destination EQUAL Expr:expression SEMI
             {:
                 if(des.getKind() != Obj.Con && des.getKind() != Obj.Meth && des.getKind() != Obj.NO_VALUE){
                     if(des.getType().getKind() == Struct.Int){ //CHECK sta ako je array ili elemArray, bool, char??
+                        parser.report_usage(desleft,des," ++ operacija");
                         RESULT = des;
 
                         if(!parser.errorDetected){
@@ -587,6 +657,7 @@ Matched ::= Designator:destination EQUAL Expr:expression SEMI
                         RESULT = des;
 
                         if(!parser.errorDetected){
+                            parser.report_usage(desleft,des," ++ operacija");
                             if(des.getKind() == Obj.Elem){
                                 Code.put(Code.dup2);
                             }
@@ -663,6 +734,7 @@ Matched ::= Designator:destination EQUAL Expr:expression SEMI
                }
                if(de.getType().getKind() == Struct.Int || de.getType().getKind() == Struct.Bool || de.getType().getKind() == Struct.Char)
                {
+                    parser.report_usage(deleft,de,"Argument READ metode");
                     RESULT = de;
 
                     if(!parser.errorDetected)
@@ -685,7 +757,7 @@ Matched ::= Designator:destination EQUAL Expr:expression SEMI
             {:
                 if(e.getType().getKind() == Struct.Int || e.getType().getKind() == Struct.Bool && e.getType().getKind() == Struct.Char){
                     RESULT = e;
-
+                    //parser.report_usage(eleft,e,"Argument PRINT metode");
                     if(!parser.errorDetected){
                         Code.loadConst(num);
                         if(e.getType() == Tab.charType){
@@ -707,6 +779,7 @@ Matched ::= Designator:destination EQUAL Expr:expression SEMI
                 if(e.getType().getKind() == Struct.Int){
                     mk.printCallCount++;
                     RESULT = e; //CHECK RETURN
+                    //parser.report_usage(eleft,e,"Argument PRINT metode");
                     if(!parser.errorDetected){
                         Code.loadConst(5);
                         Code.put(Code.print);
@@ -773,6 +846,7 @@ Matched ::= Designator:destination EQUAL Expr:expression SEMI
 Factor ::=  Designator:des
 			{:
                 if(des.getKind()==Obj.Con){
+                    parser.report_usage(desleft,des," IZRAZ (Expression)");
                     if(!parser.errorDetected)
                         Code.load(des);
                 }
@@ -788,6 +862,7 @@ Factor ::=  Designator:des
 		   	{:
 				if (Obj.Meth == func.getKind())
 				{
+				    parser.report_usage(funcleft,func," Poziv metode u nekom izrazu (Expression)");
 				    if(!actualParamsList.isEmpty()){
                         List<Obj> stvarniParametri = actualParamsList.pop();
                         Collection<Obj> formalniParametri = func.getLocalSymbols();//.getType().getMembers();
@@ -815,6 +890,7 @@ Factor ::=  Designator:des
 				    if(func.getType() == Tab.noType)
 				        parser.report_semantic_error(funcleft,"Funkcija "+ func.getName()+  " ne moze da se koristi u izrazima jer nema povratnu vrednost.");
 				    else{
+				        parser.report_usage(funcleft,func,"Pronadjen poziv funkcije sa imenom: " + func.getName());
 				        if(!parser.errorDetected){
                             int destAdr = func.getAdr() - Code.pc; //PC relativna adresa
                             Code.put(Code.call);
@@ -831,6 +907,8 @@ Factor ::=  Designator:des
 			|
 			NUMBER:num
 			{:
+			    //parser.report_usage(numleft,num," IZRAZ (Broj)");
+			    parser.log.info("Number: " + num.intValue() + " na liniji: " + numleft, null); //Todo: beautify this
 			    Obj obj =  new Obj(Obj.Con, "", Tab.intType, num, Obj.NO_VALUE);
                 //Obj obj = Tab.insert(Obj.Con,"",Tab.intType); //CHECK NUMBER
                 //obj.setAdr(num.intValue());
@@ -841,6 +919,8 @@ Factor ::=  Designator:des
 			|
 			CHAR:c
 			{:
+			    //parser.report_usage(cleft,c," IZRAZ (CHAR)");
+			    parser.log.info("CHAR: " + c + " na liniji: " + cleft, null); //Todo: beautify this
 			    Obj obj = new Obj(Obj.Con, "", Tab.charType, c, Obj.NO_VALUE);
 			    if(!parser.errorDetected)
 			        Code.load(obj);
@@ -849,6 +929,8 @@ Factor ::=  Designator:des
 			|
 			BOOL:bo
 			{:
+			    //parser.report_usage(boleft,bo," IZRAZ (Bool)");
+			    parser.log.info("Bool: " + bo.booleanValue() + " na liniji: " + boleft,null); //Todo: beautify this
 			    Obj obj = new Obj(Obj.Con, "", MojaTabela.boolType, bo?1:0, Obj.NO_VALUE);
                 if(!parser.errorDetected)
 			        Code.load(obj);
@@ -857,6 +939,8 @@ Factor ::=  Designator:des
 			|
 			NEW Type:t
 			{:
+			    //parser.report_usage(tleft,t," IZRAZ (NEW " + t.getName() + ")");
+			    parser.log.info("Izraz: 'NEW' ; Tip: " + t.getKind()); //Todo: beautify this
 				if(t.getKind() != Struct.Class){
 					parser.report_error("Greska na liniji " + tleft + " nije klasnog tipa", null);
 					RESULT = Tab.noObj; //NULL...
@@ -869,7 +953,9 @@ Factor ::=  Designator:des
 			|
 			NEW Type:tname SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
 			{:
-			    //parser.log.debug("NEW Tip: " + tname.getKind());
+			    //parser.report_usage(tnameleft,tname," IZRAZ (NEW " + tname.getName() + "[" + expr.getName() + "])");
+			    //parser.report_usage(exprleft,expr," IZRAZ (NEW Type[Expr])");
+			    parser.log.info("NEW[Expr] Tip: " + tname.getKind()); //Todo: beautify this
 				if(expr.getType() != Tab.intType){
 					parser.report_error("Greska na liniji " + tnameleft + " nije int tip[example: new int[5]]", null);
 					RESULT = Tab.noObj;
@@ -891,6 +977,7 @@ Factor ::=  Designator:des
 			|
 			LPAREN Expr:expr RPAREN
 			{:
+			    parser.report_usage(exprleft,expr," IZRAZ (" + expr.getName() + ")");
 			    RESULT=expr;
 			:}
 		   ;
@@ -939,8 +1026,10 @@ Designator ::=  IDENT:ident
                         if(des.getType().getKind() != Struct.Array){
                             parser.report_semantic_error(desleft,"Simbol "+ des.getName()+  " ne predstavlja niz.");
                         }
-                        else if(!parser.errorDetected) //CHECK maybe
+                        else if(!parser.errorDetected){ //CHECK maybe
+                            //parser.report_usage(desleft,des," DODELA u zagradi (visak) (Expression)");
                             Code.load(des);
+                        }
                     }
 				:}
 				SQUAREBRACKETLEFT Expr:expr SQUAREBRACKETRIGHT
@@ -957,6 +1046,7 @@ Designator ::=  IDENT:ident
                         }
 
                         if(arrayOk){
+                            parser.report_usage(desleft,des," Referenciranje elementa niza");
                             //parser.log.debug("Designator tip(3 je array): " + des.getType().getKind() + " Expression tip(1 je int): " + expr.getType().getKind());
                             RESULT = new Obj(Obj.Elem, des.getName()+"[]", des.getType().getElemType(), des.getAdr(), des.getLevel());
                         }
@@ -1012,6 +1102,8 @@ ComboExpr ::=   AddTerm:addTerm
                 :}
                 CombOp:op ComboExpr:comboExpr
                 {:
+                    parser.report_usage(addTermleft,addTerm," ComboOp (prvi operand)");
+                    parser.report_usage(comboExprleft,comboExpr," ComboOp (drugi operand)");
                     if(addTerm.getKind() != Obj.Var && addTerm.getKind() != Obj.Elem){
                         parser.report_error("Greska na liniji " + addTermleft+ " nije varijabla(neocekivana kategorija simbola)", null);
                         RESULT = Tab.noObj; //NULL...
@@ -1051,6 +1143,7 @@ ComboExpr ::=   AddTerm:addTerm
 
 AddTerm ::= AddTerm:addTerm
             {:
+                parser.report_usage(addTermleft,addTerm," Sabiranje (prvi operand)");
                 if(addTerm.getKind()==Obj.Var || addTerm.getKind()==Obj.Elem){
                     if(!parser.errorDetected)
                         Code.load(addTerm);
@@ -1058,6 +1151,7 @@ AddTerm ::= AddTerm:addTerm
             :}
             AddopLeft:op Term:term
             {:
+                parser.report_usage(termleft,term," Sabiranje (drugi operand)");
                 if(addTerm.getType() != Tab.intType ||  term.getType() != Tab.intType){
                     parser.report_error("Greska na liniji " + addTermleft + " nije int tipa | ID[4]", null);
                     RESULT = Tab.noObj; //NULL...
@@ -1086,7 +1180,9 @@ Term ::= Term:term
          :}
          MulopLeft:op Factor:factor
          {:
-           //i ovde
+            //i ovde
+            parser.report_usage(termleft,term," Operacija (prvi operand)");
+            parser.report_usage(factorleft,factor," Operacija (drugi operand)");
             if(factor.getType() != Tab.intType || term.getType() != Tab.intType){
                 parser.report_error("Greska na liniji " + termleft + " nije int tipa!", null);
                 RESULT = Tab.noObj; //NULL...
@@ -1103,6 +1199,7 @@ Term ::= Term:term
 		|
 		Factor:factor
 		{:
+		    parser.report_usage(factorleft,factor," DODELA (dodatno) (Expression)");
 		    RESULT=factor;
 		:}
 		;
