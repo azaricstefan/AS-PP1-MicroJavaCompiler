@@ -7,6 +7,7 @@ MJProjekat.docx je kratka dokumentacija </br>
 U folderu test su testovi i MJParserTest klasa koja služi za pokretanje testova. </br>
 
 JFlex docs: http://www.jflex.de/docu.html
+
 JFlex user's manual: http://www.jflex.de/manual.html#jflex-ant-task
 
 Tabela simbola sa vežbi: http://ir4pp1.etf.rs/Vezbe/TabelaSimbola_v2.pdf
