@@ -1,0 +1,1 @@
+﻿java -cp .\mj-runtime.jar rs.etf.pp1.mj.runtime.Run .\program.obj
